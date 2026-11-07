@@ -1,6 +1,6 @@
 import { aptInstall, shQuote } from '@linux-toolchain/core';
 import { choiceBool, choiceList } from '../options';
-import type { InstallContext, Toolchain } from '../types';
+import type { Toolchain } from '../types';
 import { requireApt, tryAddon } from './shared';
 
 const APT_PACKAGES = [

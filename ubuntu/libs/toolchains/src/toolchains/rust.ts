@@ -1,6 +1,6 @@
 import { aptInstall, shQuote } from '@linux-toolchain/core';
 import { choiceList, choiceString } from '../options';
-import type { InstallContext, Toolchain } from '../types';
+import type { Toolchain } from '../types';
 import { hasAptProbe, tryAddon } from './shared';
 
 /** rustc needs a system linker; the rest covers common -sys crates. */

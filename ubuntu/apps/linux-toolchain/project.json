@@ -47,6 +47,14 @@
           "minify": true
         }
       }
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "vitest run --config apps/linux-toolchain/vitest.e2e.config.mts",
+        "cwd": "{workspaceRoot}"
+      }
     }
   }
 }

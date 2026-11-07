@@ -7,3 +7,4 @@ export * from './options';
 export * from './selection';
 export * from './github-release';
 export * from './install-context';
+export { LICENSE_ERROR } from './toolchains/android';

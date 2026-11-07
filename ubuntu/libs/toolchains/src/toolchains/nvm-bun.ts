@@ -1,6 +1,6 @@
 import { addRcBlock } from '@linux-toolchain/core';
 import { choiceBool, choiceList, choiceString } from '../options';
-import type { InstallContext, Toolchain } from '../types';
+import type { Toolchain } from '../types';
 import { tryAddon } from './shared';
 
 /** Pinned nvm tag used when the GitHub API lookup fails (same as the bash script). */

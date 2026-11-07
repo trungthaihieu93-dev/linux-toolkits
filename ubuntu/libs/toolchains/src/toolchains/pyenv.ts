@@ -1,6 +1,6 @@
 import { addRcBlock, aptInstall } from '@linux-toolchain/core';
 import { choiceList, choiceString } from '../options';
-import type { InstallContext, Toolchain } from '../types';
+import type { Toolchain } from '../types';
 import { requireApt, tryAddon } from './shared';
 
 const BUILD_DEPS = [

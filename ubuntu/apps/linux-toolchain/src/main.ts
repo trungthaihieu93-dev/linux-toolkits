@@ -1,22 +1,33 @@
-import { Command } from 'commander';
-import chalk from 'chalk';
-import { coreName } from '@linux-toolchain/core';
-import { toolchainsName } from '@linux-toolchain/toolchains';
-import pkg from '../package.json' with { type: 'json' };
+import {
+  DryRunRunner,
+  hasApt,
+  hasCommand,
+  logger,
+  ProcessRunner,
+  resolveContext,
+} from '@linux-toolchain/core';
+import { catalog } from '@linux-toolchain/toolchains';
+import { run } from './cli/program';
+import { inquirerPrompts } from './cli/prompts';
 
-const program = new Command()
-  .name('linux-toolchain')
-  .description(pkg.description)
-  .version(pkg.version, '-v, --version', 'print the CLI version')
-  .action(() => {
-    console.log(
-      `${chalk.bold('linux-toolchain')} ${pkg.version} (${coreName}, ${toolchainsName})`,
-    );
+run(process.argv.slice(2), {
+  catalog,
+  platform: process.platform,
+  tty: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+  prompts: inquirerPrompts,
+  out: process.stdout,
+  err: process.stderr,
+  logger,
+  resolveContext: (user) => resolveContext({ user }),
+  hasApt: () => hasApt(),
+  hasCurl: () => hasCommand('curl'),
+  createRunner: (ctx, dryRun) =>
+    dryRun ? new DryRunRunner(process.stdout) : new ProcessRunner(ctx),
+})
+  .then((code) => {
+    process.exitCode = code;
+  })
+  .catch((error: unknown) => {
+    logger.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   });
-
-program.parseAsync(process.argv).catch((error: unknown) => {
-  console.error(
-    chalk.red(error instanceof Error ? error.message : String(error)),
-  );
-  process.exit(1);
-});

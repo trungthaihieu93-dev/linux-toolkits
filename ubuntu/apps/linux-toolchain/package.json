@@ -11,7 +11,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20.17"
   },
   "os": [
     "linux"
