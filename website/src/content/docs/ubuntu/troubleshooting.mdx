@@ -27,6 +27,13 @@ sudo npx linux-toolchain --only go --defaults --dry-run
 Under `sudo`, user-level tools install for the user who ran `sudo`. Remove
 `--dry-run` to install.
 
+If this fails with `sudo: npx: command not found`, Node comes from your user's
+setup (for example nvm), which `sudo` does not see. Keep your `PATH`:
+
+```sh title="Terminal"
+sudo env "PATH=$PATH" npx linux-toolchain --only go --defaults --dry-run
+```
+
 ## `no TTY for the menu; use --all or --only id,id`
 
 The toolchain checklist needs an interactive terminal. In scripts, CI or a

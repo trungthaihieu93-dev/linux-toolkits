@@ -5,16 +5,20 @@ on:
     paths:
       - 'website/**'
       - 'ubuntu/apps/linux-toolchain/**'
-      - 'ubuntu/libs/toolchains/**'
+      - 'ubuntu/libs/**'
       - 'ubuntu/bun.lock'
+      - 'ubuntu/package.json'
+      - 'ubuntu/tsconfig.base.json'
       - '.github/workflows/docs.yml'
   push:
     branches: [main]
     paths:
       - 'website/**'
       - 'ubuntu/apps/linux-toolchain/**'
-      - 'ubuntu/libs/toolchains/**'
+      - 'ubuntu/libs/**'
       - 'ubuntu/bun.lock'
+      - 'ubuntu/package.json'
+      - 'ubuntu/tsconfig.base.json'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 
@@ -36,6 +40,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Starlight's "Last updated" date comes from each page's git history.
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -141,7 +148,7 @@ jobs:
           body=$(printf '%s\n**Docs preview** for %s\n\n- Deployment: %s\n- Branch alias: %s\n' \
             "$marker" "$SHA" "$URL" "${ALIAS:-n/a}")
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
-            --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -n1)
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n1)
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
           else

@@ -47,6 +47,13 @@ export class CatalogError extends Error {
 
 export const PAGES_DIR = 'src/content/docs/ubuntu/toolchains';
 export const DATA_FILE = 'src/data/toolchains.json';
+/**
+ * Generated pages are gitignored, so Starlight's default "Edit page" link would
+ * 404. Point it at the installer source in the catalog instead.
+ */
+export const SOURCE_EDIT_BASE =
+	'https://github.com/trungthaihieu93-dev/linux-toolkits/edit/main/ubuntu/libs/toolchains/src/toolchains/';
+
 export const GENERATED_NOTE =
 	'Generated from the linux-toolchain catalog by scripts/gen-toolchains.ts — do not edit.';
 
@@ -198,7 +205,8 @@ export function code(text: string, table = false): string {
 	const runs = text.match(/`+/g) ?? [];
 	const fence = '`'.repeat(Math.max(0, ...runs.map((r) => r.length)) + 1);
 	const pad = fence.length > 1 || text.startsWith('`') || text.endsWith('`') ? ' ' : '';
-	const body = table ? text.replace(/\|/g, '\\|') : text;
+	const flat = text.replace(/\r?\n/g, ' ');
+	const body = table ? flat.replace(/\|/g, '\\|') : flat;
 	return `${fence}${pad}${body}${pad}${fence}`;
 }
 
@@ -280,6 +288,7 @@ function renderPage(entry: ToolchainEntry, order: number): string {
 		`# ${GENERATED_NOTE}`,
 		`title: ${yamlString(entry.label)}`,
 		`description: ${yamlString(`linux-toolchain reference for ${id}: ${entry.description}`)}`,
+		`editUrl: ${yamlString(`${SOURCE_EDIT_BASE}${id}.ts`)}`,
 		'sidebar:',
 		`  order: ${order}`,
 		'---',

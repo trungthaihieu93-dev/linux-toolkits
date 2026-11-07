@@ -8,7 +8,7 @@
     "test": "bun --bun nx run-many -t test",
     "build": "bun --bun nx run-many -t build",
     "e2e": "bun --bun nx run-many -t e2e",
-    "format:check": "bun --bun nx format:check",
+    "format:check": "bun --bun nx format:check --all",
     "format": "bun --bun nx format:write"
   },
   "private": true,

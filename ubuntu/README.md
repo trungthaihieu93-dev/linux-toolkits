@@ -29,7 +29,8 @@ dependencies and runs Nx, vitest and eslint. The published package is still a
 Node.js bundle (Node 22.13 or newer).
 
 The build output in `dist/apps/linux-toolchain/` is the publishable package:
-`main.js` (third-party dependencies inlined), `package.json` and `README.md`.
+`main.js` (third-party dependencies inlined), `package.json`, `README.md` and
+`LICENSE`.
 
 Architecture, invariants and the release procedure are in the repository
 root [`AGENTS.md`](../AGENTS.md).

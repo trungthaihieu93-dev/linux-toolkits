@@ -3,6 +3,7 @@ import {
 	CatalogError,
 	DATA_FILE,
 	GENERATED_NOTE,
+	SOURCE_EDIT_BASE,
 	code,
 	escapeInline,
 	exampleOpt,
@@ -93,11 +94,12 @@ describe('renderToolchains', () => {
 
 	test('frontmatter carries the generated note, title, description and order', () => {
 		const lines = page('beta');
-		expect(lines.slice(0, 7)).toEqual([
+		expect(lines.slice(0, 8)).toEqual([
 			'---',
 			`# ${GENERATED_NOTE}`,
 			'title: "Beta"',
 			'description: "linux-toolchain reference for beta: beta runtime"',
+			`editUrl: "${SOURCE_EDIT_BASE}beta.ts"`,
 			'sidebar:',
 			'  order: 1',
 			'---',
@@ -234,6 +236,7 @@ describe('Markdown helpers', () => {
 		expect(code('a`b')).toBe('`` a`b ``');
 		expect(code('a|b')).toBe('`a|b`');
 		expect(code('a|b', true)).toBe('`a\\|b`');
+		expect(code('a\nb|c', true)).toBe('`a b\\|c`');
 	});
 });
 

@@ -60,7 +60,7 @@ build-from-source fallback that is not needed.
 
 The last line prints every root/user script a full install would run and
 changes nothing. The publishable package is the build output folder
-`dist/apps/linux-toolchain/` (`main.js`, `package.json`, `README.md`).
+`dist/apps/linux-toolchain/` (`main.js`, `package.json`, `README.md`, `LICENSE`).
 
 ## Architecture
 
@@ -171,7 +171,9 @@ bun test && bun run check && bun run build
 - **Links.** `starlight-links-validator` fails the build on broken internal
   links.
 - **Deploy.** `.github/workflows/docs.yml` builds on pull requests and `main`
-  (paths `website/**`, the CLI app, `libs/toolchains`, `ubuntu/bun.lock`),
+  (paths `website/**`, the CLI app, `ubuntu/libs/**`, `ubuntu/bun.lock`,
+  `ubuntu/package.json`, `ubuntu/tsconfig.base.json`), checks out the full
+  history for "Last updated" dates,
   deploys a preview per pull request with one updated comment, and deploys
   production from `main` to the Cloudflare Pages project `linux-toolkits-docs`
   with the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. Fork
