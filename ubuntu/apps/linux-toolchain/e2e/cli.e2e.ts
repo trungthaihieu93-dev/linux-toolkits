@@ -48,7 +48,7 @@ describe('linux-toolchain bundle', () => {
     // Fail-safe: `--user` makes a real (non-dry) run exit 2 straight away
     // ("--user needs root") when this suite runs as a non-root user, as it
     // does in CI, so a regression that drops --dry-run cannot install anything.
-    // Run as root, this guard does not apply.
+    // The suite must run as a non-root user (as root it exits 2 before any step).
     const { status, stdout, stderr } = cli(
       'install',
       '--user',
