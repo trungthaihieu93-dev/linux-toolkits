@@ -1,0 +1,186 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - 'ubuntu/**'
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - 'ubuntu/**'
+      - '.github/workflows/**'
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # nrwl/nx-set-shas reads previous workflow runs to find the last green commit.
+  actions: read
+
+concurrency:
+  # github.workflow is the caller's name under workflow_call, so a publish run
+  # never shares a group with a plain CI run.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Lint, test, build, pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ubuntu
+    env:
+      NX_NO_CLOUD: 'true'
+      NX_DAEMON: 'false'
+      # PRs and pushes to main only check affected projects; a release tag
+      # (via workflow_call) or a manual run checks everything.
+      NX_AFFECTED: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ubuntu/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Derive Nx base and head SHAs
+        if: env.NX_AFFECTED == 'true'
+        uses: nrwl/nx-set-shas@v5
+        with:
+          main-branch-name: main
+
+      - name: Lint, test, build, e2e (affected)
+        if: env.NX_AFFECTED == 'true'
+        run: npx nx affected -t lint test build e2e
+
+      - name: Lint, test, build, e2e (all)
+        if: env.NX_AFFECTED != 'true'
+        run: npx nx run-many -t lint test build e2e
+
+      - name: Check formatting
+        run: npx nx format:check --all
+
+      - name: ShellCheck install-toolchains.sh
+        run: shellcheck --severity=warning install-toolchains.sh
+
+      - name: Build package
+        run: npx nx build linux-toolchain
+
+      - name: Pack package
+        id: pack
+        working-directory: ubuntu/dist/apps/linux-toolchain
+        run: |
+          file=$(npm pack --pack-destination "$RUNNER_TEMP" --json | jq -r '.[0].filename')
+          test -f "$RUNNER_TEMP/$file"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - name: Run tarball with npx
+        working-directory: ${{ runner.temp }}
+        env:
+          TGZ: ${{ steps.pack.outputs.file }}
+        run: npx --yes "./$TGZ" --help
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Run tarball with bun
+        working-directory: ${{ runner.temp }}
+        env:
+          TGZ: ${{ steps.pack.outputs.file }}
+        run: |
+          mkdir bun-test
+          cd bun-test
+          bun add "$RUNNER_TEMP/$TGZ"
+          bunx linux-toolchain --help
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: ${{ runner.temp }}/${{ steps.pack.outputs.file }}
+          if-no-files-found: error
+          retention-days: 7
+
+  node-compat:
+    name: Bundle on Node ${{ matrix.node }}
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.13.0 is the engines.node floor of the published package.
+        node: ['22.13.0', '24']
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: package
+          path: ${{ runner.temp }}/package-artifact
+
+      - name: Extract package
+        working-directory: ${{ runner.temp }}
+        run: tar -xzf package-artifact/*.tgz
+
+      - name: --help
+        working-directory: ${{ runner.temp }}
+        run: node package/main.js --help
+
+      - name: list --json returns 13 toolchains
+        working-directory: ${{ runner.temp }}
+        run: |
+          node package/main.js list --json | node -e '
+            const entries = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            if (!Array.isArray(entries) || entries.length !== 13) {
+              console.error("expected 13 toolchains, got " + entries.length);
+              process.exit(1);
+            }
+            console.log("ok: " + entries.length + " toolchains");
+          '
+
+      - name: Dry-run every toolchain
+        working-directory: ${{ runner.temp }}
+        run: node package/main.js --all --defaults -y --dry-run
+
+  smoke:
+    name: Real install smoke (ubuntu:24.04, root --user)
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: ubuntu:24.04
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: package
+          path: /tmp/package-artifact
+
+      - name: Extract package
+        working-directory: /tmp
+        run: tar -xzf package-artifact/*.tgz
+
+      - name: Create non-root target user
+        run: useradd -m -s /bin/bash tester
+
+      - name: Install go and cpp for tester
+        working-directory: /tmp
+        run: node package/main.js --only go,cpp --defaults -y --user tester
+
+      - name: Assert toolchains work
+        run: |
+          /usr/local/go/bin/go version
+          gcc --version
+          clang --version

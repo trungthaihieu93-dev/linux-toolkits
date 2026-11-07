@@ -1,0 +1,109 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`jenv > all options: every plugin and global 25 1`] = `
+[
+  {
+    "as": "user",
+    "label": "install jenv and register JDKs",
+    "script": "if [ -d "$HOME/.jenv/.git" ]; then
+  git -C "$HOME/.jenv" pull --ff-only
+else
+  git clone https://github.com/jenv/jenv.git "$HOME/.jenv"
+fi
+export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"
+for d in /usr/lib/jvm/java-*-openjdk-*; do
+  if [ -d "$d" ] && [ ! -L "$d" ]; then
+    jenv add "$d" || echo "could not register $d" >&2
+  fi
+done
+jenv versions",
+  },
+  {
+    "as": "user",
+    "label": "enable jenv plugin export",
+    "script": "export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"
+jenv enable-plugin 'export'",
+  },
+  {
+    "as": "user",
+    "label": "enable jenv plugin maven",
+    "script": "export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"
+jenv enable-plugin 'maven'",
+  },
+  {
+    "as": "user",
+    "label": "enable jenv plugin gradle",
+    "script": "export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"
+jenv enable-plugin 'gradle'",
+  },
+  {
+    "as": "user",
+    "label": "set jenv global 25",
+    "script": "export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"
+jenv global '25'
+jenv version",
+  },
+  {
+    "as": "user",
+    "label": "add jenv to shell rc files",
+    "script": "for f in "$HOME/.bashrc" "$HOME/.zshrc"; do
+  [ -f "$f" ] || continue
+  grep -qF '# >>> jenv >>>' "$f" && continue
+  printf '\\n# >>> %s >>>\\n%s\\n# <<< %s <<<\\n' 'jenv' 'export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"' 'jenv' >> "$f"
+done",
+  },
+]
+`;
+
+exports[`jenv > defaults: clone, register every OpenJDK, export plugin, global 21, rc block (bash parity) 1`] = `
+[
+  {
+    "as": "user",
+    "label": "install jenv and register JDKs",
+    "script": "if [ -d "$HOME/.jenv/.git" ]; then
+  git -C "$HOME/.jenv" pull --ff-only
+else
+  git clone https://github.com/jenv/jenv.git "$HOME/.jenv"
+fi
+export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"
+for d in /usr/lib/jvm/java-*-openjdk-*; do
+  if [ -d "$d" ] && [ ! -L "$d" ]; then
+    jenv add "$d" || echo "could not register $d" >&2
+  fi
+done
+jenv versions",
+  },
+  {
+    "as": "user",
+    "label": "enable jenv plugin export",
+    "script": "export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"
+jenv enable-plugin 'export'",
+  },
+  {
+    "as": "user",
+    "label": "set jenv global 21",
+    "script": "export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"
+jenv global '21'
+jenv version",
+  },
+  {
+    "as": "user",
+    "label": "add jenv to shell rc files",
+    "script": "for f in "$HOME/.bashrc" "$HOME/.zshrc"; do
+  [ -f "$f" ] || continue
+  grep -qF '# >>> jenv >>>' "$f" && continue
+  printf '\\n# >>> %s >>>\\n%s\\n# <<< %s <<<\\n' 'jenv' 'export PATH="$HOME/.jenv/bin:$PATH"
+eval "$(jenv init -)"' 'jenv' >> "$f"
+done",
+  },
+]
+`;

@@ -1,0 +1,39 @@
+{
+  "name": "@linux-toolchain/source",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {
+    "lint": "nx run-many -t lint",
+    "test": "nx run-many -t test",
+    "build": "nx run-many -t build"
+  },
+  "private": true,
+  "devDependencies": {
+    "@eslint/js": "^9.8.0",
+    "@inquirer/prompts": "^8.7.5",
+    "@nx/esbuild": "^24.0.5",
+    "@nx/eslint": "^24.0.5",
+    "@nx/eslint-plugin": "24.0.5",
+    "@nx/js": "24.0.5",
+    "@nx/node": "^24.0.5",
+    "@nx/vitest": "^24.0.5",
+    "@nx/workspace": "24.0.5",
+    "@swc/helpers": "~0.5.18",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "~5.0.1",
+    "chalk": "^6.0.1",
+    "commander": "^15.1.0",
+    "esbuild": "^0.27.0",
+    "eslint": "^9.8.0",
+    "eslint-config-prettier": "^10.0.0",
+    "nx": "24.0.5",
+    "prettier": "~3.6.2",
+    "tslib": "^2.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.58.0",
+    "vite": "^8.0.0",
+    "vitest": "~5.0.1"
+  },
+  "packageManager": "npm@11.20.0"
+}
