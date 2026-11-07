@@ -42,7 +42,9 @@ release channel) and up to three add-ons. The
   toolchains that need apt fail.
 - **Node.js 22.13 or newer** to run it with `npx`, or **bun** to run it with
   `bunx`. The published package is a single bundled file with no runtime
-  dependencies.
+  dependencies. Install one of them first:
+  [Prerequisites](/ubuntu/prerequisites/) shows how, with nvm or the bun
+  installer.
 - **sudo** for the system steps (apt packages, `/usr/local`, `/opt`,
   `/etc/profile.d`). You run the CLI as your normal user.
 
@@ -69,6 +71,7 @@ release channel) and up to three add-ons. The
 ## Next steps
 
 <CardGrid>
+	<LinkCard title="Prerequisites" description="Install Node.js (with nvm) or bun first." href="/ubuntu/prerequisites/" />
 	<LinkCard title="Quick start" description="Preview, then run your first install." href="/ubuntu/quick-start/" />
 	<LinkCard title="Usage" description="The interactive flow, every flag, list and exit codes." href="/ubuntu/usage/" />
 	<LinkCard title="How it works" description="sudo, shell config markers, add-on warnings and downloads." href="/ubuntu/how-it-works/" />

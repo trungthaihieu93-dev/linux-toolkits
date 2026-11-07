@@ -17,6 +17,30 @@ dependencies.
 
 Full documentation: <https://linux-toolkits-docs.pages.dev>.
 
+## Prerequisites
+
+Install Node.js 22.13+ or bun first, as your normal user (both go into your
+home directory, so no `sudo`). Do not use apt's `nodejs` package: it is
+usually older than 22.13.
+
+```sh
+sudo apt-get update && sudo apt-get install -y curl unzip ca-certificates
+
+# Option A: Node.js with nvm (https://github.com/nvm-sh/nvm#installing-and-updating)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh | bash
+. "$HOME/.nvm/nvm.sh"
+nvm install --lts && nvm alias default 'lts/*'
+node --version                 # v22.13.0 or newer
+
+# Option B: bun (https://bun.sh/docs/installation)
+curl -fsSL https://bun.sh/install | bash
+export PATH="$HOME/.bun/bin:$PATH"
+bun --version
+```
+
+Other Node.js install methods: <https://nodejs.org/en/download>. Step by step:
+<https://linux-toolkits-docs.pages.dev/ubuntu/prerequisites/>.
+
 ## Usage
 
 ```text

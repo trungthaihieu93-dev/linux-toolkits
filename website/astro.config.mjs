@@ -50,6 +50,7 @@ export default defineConfig({
 					label: 'Ubuntu toolchains',
 					items: [
 						'ubuntu',
+						'ubuntu/prerequisites',
 						'ubuntu/quick-start',
 						'ubuntu/usage',
 						'ubuntu/how-it-works',

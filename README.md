@@ -4,14 +4,42 @@ Developer machine setup for Debian/Ubuntu. The main product is
 [`linux-toolchain`](./ubuntu/apps/linux-toolchain/README.md), an interactive
 installer for developer toolchains published to npm.
 
+### Prerequisites
+
+An apt-based distribution (Debian, Ubuntu or a derivative), a user that can
+run `sudo`, and **Node.js 22.13 or newer** (for `npx`) **or bun** (for
+`bunx`). A fresh system has neither runtime, so install one first, as your
+normal user. Do not use apt's `nodejs` package: it is usually older than
+22.13.
+
+```sh
+sudo apt-get update && sudo apt-get install -y curl unzip ca-certificates
+
+# Option A: Node.js with nvm (https://github.com/nvm-sh/nvm#installing-and-updating)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh | bash
+. "$HOME/.nvm/nvm.sh"
+nvm install --lts && nvm alias default 'lts/*'
+node --version                 # v22.13.0 or newer
+
+# Option B: bun (https://bun.sh/docs/installation)
+curl -fsSL https://bun.sh/install | bash
+export PATH="$HOME/.bun/bin:$PATH"
+bun --version
+```
+
+Other Node.js install methods: <https://nodejs.org/en/download>. The
+[Prerequisites page](https://linux-toolkits-docs.pages.dev/ubuntu/prerequisites/)
+has the step-by-step version.
+
+### Run
+
 ```sh
 npx linux-toolchain            # or: bunx linux-toolchain
 npx linux-toolchain list       # show toolchains, options and add-ons
 npx linux-toolchain --only go,cpp --defaults --dry-run
 ```
 
-It needs Node.js 22.13 or newer and an apt-based distribution. The
-[documentation site](https://linux-toolkits-docs.pages.dev) covers usage, how it works and every toolchain;
+The [documentation site](https://linux-toolkits-docs.pages.dev) covers usage, how it works and every toolchain;
 the [CLI README](./ubuntu/apps/linux-toolchain/README.md) is the short version.
 
 ## Repository layout

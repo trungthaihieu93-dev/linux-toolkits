@@ -1,0 +1,119 @@
+---
+title: Prerequisites
+description: Install Node.js 22.13 or newer (with nvm) or bun before running linux-toolchain with npx or bunx.
+---
+
+import { Aside, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+`linux-toolchain` runs with `npx` (Node.js 22.13 or newer) or with `bunx`
+(bun). A fresh Debian or Ubuntu install has neither, so install one of them
+first. You only need one.
+
+| You need | Why |
+| --- | --- |
+| Debian, Ubuntu or a derivative (apt) | The installers use apt for system packages |
+| A user that can run `sudo` | System steps (apt, `/usr/local`, `/opt`, `/etc/profile.d`) go through `sudo` |
+| `curl` and `unzip` | The nvm and bun installers below download with `curl`; the bun installer unpacks with `unzip` |
+| **Node.js 22.13 or newer** (for `npx`) **or bun** (for `bunx`) | Runs the CLI |
+
+Check what you already have:
+
+```sh title="Terminal"
+node --version   # v22.13.0 or newer is enough
+bun --version    # any bun release is enough
+```
+
+If either command prints a suitable version, skip to the
+[Quick start](/ubuntu/quick-start/).
+
+## Install the basics
+
+```sh title="Terminal"
+sudo apt-get update
+sudo apt-get install -y curl unzip ca-certificates
+```
+
+<Aside type="caution" title="Do not use apt's nodejs">
+	The `nodejs` package in the Ubuntu and Debian archives is usually older
+	than 22.13 (for example Node 18 on Ubuntu 24.04), which `linux-toolchain`
+	does not support. Install Node.js with nvm instead.
+</Aside>
+
+## Install Node.js or bun
+
+Pick one. Both install into your home directory and need no `sudo`.
+
+<Tabs syncKey="runner">
+<TabItem label="Node.js with nvm">
+
+<Steps>
+
+1. Install [nvm](https://github.com/nvm-sh/nvm), the Node Version Manager.
+   The command comes from the
+   [nvm install guide](https://github.com/nvm-sh/nvm#installing-and-updating);
+   check there for the newest version tag.
+
+   ```sh title="Terminal"
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.41.0/install.sh | bash
+   ```
+
+2. Load nvm in the current shell (or open a new terminal):
+
+   ```sh title="Terminal"
+   export NVM_DIR="$HOME/.nvm"
+   . "$NVM_DIR/nvm.sh"
+   ```
+
+3. Install the current Node.js LTS release and make it the default:
+
+   ```sh title="Terminal"
+   nvm install --lts
+   nvm alias default 'lts/*'
+   node --version   # v22.13.0 or newer
+   ```
+
+</Steps>
+
+Other ways to install Node.js are listed on the
+[Node.js download page](https://nodejs.org/en/download).
+
+</TabItem>
+<TabItem label="bun">
+
+<Steps>
+
+1. Install [bun](https://bun.sh) with its official script (see the
+   [bun installation guide](https://bun.sh/docs/installation)):
+
+   ```sh title="Terminal"
+   curl -fsSL https://bun.sh/install | bash
+   ```
+
+2. Load it in the current shell (or open a new terminal):
+
+   ```sh title="Terminal"
+   export BUN_INSTALL="$HOME/.bun"
+   export PATH="$BUN_INSTALL/bin:$PATH"
+   bun --version
+   ```
+
+</Steps>
+
+</TabItem>
+</Tabs>
+
+<Aside type="tip" title="Run it as your normal user">
+	nvm and bun live in your home directory, so `sudo` does not see them. Run
+	`npx linux-toolchain` as yourself; it asks for `sudo` only for the steps
+	that need it. If you do run it with `sudo`, see
+	[Troubleshooting](/ubuntu/troubleshooting/).
+</Aside>
+
+The [`nvm-bun`](/ubuntu/toolchains/nvm-bun/) toolchain uses the same official
+nvm and bun installers, so you can still select it later, for example to add
+pnpm, yarn or TypeScript.
+
+## Next
+
+Continue with the [Quick start](/ubuntu/quick-start/): preview an install with
+`--dry-run`, then run it.
