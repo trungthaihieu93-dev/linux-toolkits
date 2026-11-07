@@ -1,0 +1,11 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git"],
+  "mcp": {
+    "nx-mcp": {
+      "type": "local",
+      "command": ["npx", "--prefix", "ubuntu", "nx", "mcp", "ubuntu"],
+      "enabled": true
+    }
+  }
+}

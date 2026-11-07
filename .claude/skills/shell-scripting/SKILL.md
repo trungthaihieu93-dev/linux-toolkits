@@ -1,6 +1,6 @@
 ---
 name: shell-scripting
-description: Rules for writing and reviewing bash/zsh in this workspace. Use when editing any .sh file (including install-toolchains.sh), shell rc or profile files (.bashrc, .zshrc, .profile, .zprofile, /etc/profile.d), the snippet builders in libs/core/src/shell.ts, or the bash scripts that toolchain installers in libs/toolchains/src/toolchains/ pass to Runner.asRoot/asUser.
+description: Rules for writing and reviewing bash/zsh in this workspace. Use when editing any .sh file (including ubuntu/install-toolchains.sh), shell rc or profile files (.bashrc, .zshrc, .profile, .zprofile, /etc/profile.d), the snippet builders in ubuntu/libs/core/src/shell.ts, or the bash scripts that toolchain installers in ubuntu/libs/toolchains/src/toolchains/ pass to Runner.asRoot/asUser.
 ---
 
 # Shell scripting
@@ -13,13 +13,13 @@ committing.
 
 - Standalone scripts: `set -euo pipefail` by default.
 - When one failing step must not abort the rest (as in
-  `install-toolchains.sh`): `set -uo pipefail` at the top, and run each step in
+  `ubuntu/install-toolchains.sh`): `set -uo pipefail` at the top, and run each step in
   its own subshell with `( set -e; step )`, then record its status.
 - `set -e` is ignored inside a function called from `if`, `&&`, `||` or `!`.
   Do not rely on it there; check the status explicitly.
 - Sourcing files that are not `-u`/`-e` safe (e.g. `nvm.sh`): wrap them, as in
   `set +e; . "$NVM_DIR/nvm.sh"; set -e`.
-- In this repo, `rootScript`/`userScript` (`libs/core/src/runner.ts`) already
+- In this repo, `rootScript`/`userScript` (`ubuntu/libs/core/src/runner.ts`) already
   prepend `set -e`; snippets must not assume `-u` or `pipefail`.
 
 ## Quoting
@@ -27,7 +27,7 @@ committing.
 - Quote every expansion: `"$var"`, `"$@"`, `"$(cmd)"`. Use arrays for argument
   lists, never word-splitting of a string.
 - TypeScript building bash: pass every interpolated value through `shQuote`
-  (`libs/core/src/shell.ts`). It produces one single-quoted word, escaping `'`
+  (`ubuntu/libs/core/src/shell.ts`). It produces one single-quoted word, escaping `'`
   as `'\''`. Only hard-coded, reviewed literals may stay unquoted.
 - `printf '%s\n' "$x"` instead of `echo "$x"` for arbitrary data.
 
@@ -45,7 +45,7 @@ committing.
 
 - Never append blindly. Guard with a marker: `grep -qF "$marker" "$f" || ...`.
 - Use the existing markers and builders so machines configured by
-  `install-toolchains.sh` are recognised: `# >>> name >>>` / `# <<< name <<<`
+  `ubuntu/install-toolchains.sh` are recognised: `# >>> name >>>` / `# <<< name <<<`
   via `addRcBlock`, `/etc/profile.d/devtools-<name>.sh` via `writeProfile`,
   and `# devtools-profile-hook`. Markers must stay byte-identical.
 - Skip rc files that do not exist rather than creating them.
@@ -91,7 +91,7 @@ committing.
   truncated transfer cannot execute half a script.
 - Verify checksums when the publisher provides them:
   `printf '%s  %s\n' "$sha" "$file" | sha256sum -c -`. In TypeScript use
-  `installGithubBinary` with `sha256Url` (`libs/toolchains/src/github-release.ts`).
+  `installGithubBinary` with `sha256Url` (`ubuntu/libs/toolchains/src/github-release.ts`).
 - Download into `tmp=$(mktemp -d)` with `trap 'rm -rf "$tmp"' EXIT`.
 
 ## Verify before committing
@@ -103,6 +103,6 @@ docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:stable path/to/script
 
 - Generated snippets: specs drive installers with `RecordingRunner`, assert
   the recorded `asRoot`/`asUser` calls, and pipe each script through
-  `bash -n` (see `libs/toolchains/src/toolchains/go.spec.ts`).
+  `bash -n` (see `ubuntu/libs/toolchains/src/toolchains/go.spec.ts`).
 - End to end: build, then run the bundle with `--dry-run`. Never run an
   installer for real on a development machine.
