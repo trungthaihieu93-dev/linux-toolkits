@@ -1,0 +1,28 @@
+{
+  "name": "linux-toolchain",
+  "version": "0.1.0",
+  "description": "Interactive installer for common developer toolchains on Debian/Ubuntu Linux.",
+  "type": "module",
+  "bin": {
+    "linux-toolchain": "main.js"
+  },
+  "files": [
+    "main.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "os": [
+    "linux"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trungthaihieu93-dev/linux-toolkits.git",
+    "directory": "ubuntu/apps/linux-toolchain"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

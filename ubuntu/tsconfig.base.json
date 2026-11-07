@@ -1,0 +1,22 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "bundler",
+    "importHelpers": true,
+    "target": "es2022",
+    "module": "esnext",
+    "lib": ["es2022"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "strict": false,
+    "paths": {
+      "@linux-toolchain/core": ["./libs/core/src/index.ts"],
+      "@linux-toolchain/toolchains": ["./libs/toolchains/src/index.ts"]
+    },
+    "resolveJsonModule": true
+  },
+  "exclude": ["node_modules", "tmp"]
+}

@@ -1,0 +1,52 @@
+{
+  "name": "linux-toolchain",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/linux-toolchain/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "platform": "node",
+        "outputPath": "dist/apps/linux-toolchain",
+        "format": ["esm"],
+        "bundle": true,
+        "thirdParty": true,
+        "generatePackageJson": false,
+        "main": "apps/linux-toolchain/src/main.ts",
+        "tsConfig": "apps/linux-toolchain/tsconfig.app.json",
+        "assets": [
+          {
+            "input": "apps/linux-toolchain",
+            "glob": "package.json",
+            "output": "."
+          },
+          {
+            "input": "apps/linux-toolchain",
+            "glob": "README.md",
+            "output": "."
+          }
+        ],
+        "esbuildOptions": {
+          "target": "node20",
+          "sourcemap": false,
+          "outExtension": {
+            ".js": ".js"
+          },
+          "banner": {
+            "js": "#!/usr/bin/env node\nimport { createRequire as __ltCreateRequire } from 'node:module';\nconst require = __ltCreateRequire(import.meta.url);"
+          }
+        }
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "minify": true
+        }
+      }
+    }
+  }
+}
