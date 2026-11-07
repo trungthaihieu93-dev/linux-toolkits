@@ -10,7 +10,6 @@ on:
     paths:
       - 'ubuntu/**'
       - '.github/workflows/**'
-  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -19,9 +18,7 @@ permissions:
   actions: read
 
 concurrency:
-  # github.workflow is the caller's name under workflow_call, so a publish run
-  # never shares a group with a plain CI run.
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -35,8 +32,8 @@ jobs:
     env:
       NX_NO_CLOUD: 'true'
       NX_DAEMON: 'false'
-      # PRs and pushes to main only check affected projects; a release tag
-      # (via workflow_call) or a manual run checks everything.
+      # PRs and pushes to main only check affected projects; a manual run
+      # checks everything.
       NX_AFFECTED: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
     steps:
       - uses: actions/checkout@v7
@@ -192,3 +189,129 @@ jobs:
           /usr/local/go/bin/go version
           gcc --version
           clang --version
+
+  release:
+    name: Publish to npm (new version on main)
+    # Releasing = bump apps/linux-toolchain/package.json in a PR and merge.
+    # Publishes the tarball the checks job built and every job above tested.
+    needs: [checks, node-compat, smoke]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: release-npm
+      cancel-in-progress: false
+    permissions:
+      # Push the linux-toolchain@X.Y.Z tag after publishing.
+      contents: write
+      # npm trusted publishing (OIDC) and provenance attestations.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - name: Ensure npm supports trusted publishing
+        run: |
+          if ! npx --yes semver@7 -r '>=11.5.1' "$(npm --version)" >/dev/null; then
+            npm install -g npm@11
+          fi
+          npm --version
+
+      - name: Read the package version
+        id: version
+        run: |
+          version=$(node -p "require('./ubuntu/apps/linux-toolchain/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Package version: $version"
+
+      - name: Check whether this version is already on npm
+        id: existing
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if published=$(npm view "linux-toolchain@$VERSION" version 2>/dev/null) && [ "$published" = "$VERSION" ]; then
+            echo "::notice::linux-toolchain@$VERSION is already on npm; nothing to publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download the CI-tested package
+        if: steps.existing.outputs.skip != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: package
+          path: ${{ runner.temp }}/package-artifact
+
+      - name: Verify the tarball name and version
+        id: tarball
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARTIFACT_DIR: ${{ runner.temp }}/package-artifact
+        run: |
+          shopt -s nullglob
+          tarballs=("$ARTIFACT_DIR"/*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one .tgz in the package artifact, found ${#tarballs[@]}"
+            exit 1
+          fi
+          tgz="${tarballs[0]}"
+          tar -xzOf "$tgz" package/package.json | node -e '
+            const pkg = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            if (pkg.name !== "linux-toolchain" || pkg.version !== process.env.VERSION) {
+              console.error("::error::Tarball is " + pkg.name + "@" + pkg.version + ", expected linux-toolchain@" + process.env.VERSION);
+              process.exit(1);
+            }
+            console.log("Tarball is " + pkg.name + "@" + pkg.version);
+          '
+          echo "file=$tgz" >> "$GITHUB_OUTPUT"
+
+      # npm tries trusted publishing (OIDC) first and falls back to
+      # NODE_AUTH_TOKEN. Once a trusted publisher is configured on npmjs.com,
+      # the NPM_TOKEN secret can be deleted.
+      - name: Publish
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TGZ: ${{ steps.tarball.outputs.file }}
+        run: npm publish "$TGZ" --provenance --access public
+
+      - name: Wait for the registry to serve the new version
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for attempt in $(seq 1 12); do
+            if [ "$(npm view "linux-toolchain@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+              echo "linux-toolchain@$VERSION is live on npm."
+              exit 0
+            fi
+            echo "Attempt $attempt: not visible yet, retrying in 10s."
+            sleep 10
+          done
+          echo "::error::linux-toolchain@$VERSION did not appear on npm within 2 minutes."
+          exit 1
+
+      # Runs on every main release run, so a tag missed earlier is added later.
+      - name: Tag the release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tag="linux-toolchain@$VERSION"
+          if [ "$(npm view "linux-toolchain@$VERSION" version 2>/dev/null)" != "$VERSION" ]; then
+            echo "$tag is not on npm; not tagging."
+            exit 0
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+            echo "Tag $tag already exists."
+            exit 0
+          fi
+          git tag "$tag" "$GITHUB_SHA"
+          git push origin "refs/tags/$tag"
+          echo "Created tag $tag at $GITHUB_SHA."
