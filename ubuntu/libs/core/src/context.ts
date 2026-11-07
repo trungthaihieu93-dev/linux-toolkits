@@ -40,12 +40,18 @@ export function getentPasswd(key: string): string | undefined {
 
 function defaultGetuid(): number {
   if (typeof process.getuid !== 'function') {
-    throw new Error('this platform has no user ids; linux-toolchain needs Linux');
+    throw new Error(
+      'this platform has no user ids; linux-toolchain needs Linux',
+    );
   }
   return process.getuid();
 }
 
-function lookup(getent: (key: string) => string | undefined, key: string, notFound: string): { user: string; home: string } {
+function lookup(
+  getent: (key: string) => string | undefined,
+  key: string,
+  notFound: string,
+): { user: string; home: string } {
   const fields = getent(key)?.split(':');
   const user = fields?.[0];
   const home = fields?.[5];
@@ -61,18 +67,27 @@ export function resolveContext(opts: ResolveContextOptions = {}): Context {
   const uid = getuid();
 
   if (uid !== 0) {
-    if (opts.user) throw new Error('--user needs root (run with sudo, or drop --user)');
-    const { user, home } = lookup(getent, String(uid), `cannot resolve the current user (uid ${uid})`);
+    if (opts.user)
+      throw new Error('--user needs root (run with sudo, or drop --user)');
+    const { user, home } = lookup(
+      getent,
+      String(uid),
+      `cannot resolve the current user (uid ${uid})`,
+    );
     return { isRoot: false, user, home };
   }
 
   const target = opts.user || env['SUDO_USER'] || '';
   if (!target || target === 'root') {
-    throw new Error('no non-root target user; run via sudo from your account or pass --user NAME');
+    throw new Error(
+      'no non-root target user; run via sudo from your account or pass --user NAME',
+    );
   }
   const { user, home } = lookup(getent, target, `user not found: ${target}`);
   if (user === 'root') {
-    throw new Error('no non-root target user; run via sudo from your account or pass --user NAME');
+    throw new Error(
+      'no non-root target user; run via sudo from your account or pass --user NAME',
+    );
   }
   return { isRoot: true, user, home };
 }

@@ -35,11 +35,14 @@ describe('catalog invariants', () => {
 
   it('requires and addonImplies point at existing components and add-ons', () => {
     for (const t of catalog) {
-      for (const r of t.requires ?? []) expect(getToolchain(r), `${t.id} requires ${r}`).toBeDefined();
+      for (const r of t.requires ?? [])
+        expect(getToolchain(r), `${t.id} requires ${r}`).toBeDefined();
       for (const [addon, target] of Object.entries(t.addonImplies ?? {})) {
         expect(getToolchain(target), `${t.id} ${addon}`).toBeDefined();
         const addons = t.options.find((o) => o.key === 'addons');
-        const known = addons?.kind === 'multi' && addons.choices.some((c) => c.value === addon);
+        const known =
+          addons?.kind === 'multi' &&
+          addons.choices.some((c) => c.value === addon);
         expect(known, `${t.id} ${addon}`).toBe(true);
       }
     }
@@ -75,7 +78,8 @@ describe('catalog invariants', () => {
       const addons = t.options.find((o) => o.key === 'addons');
       if (!addons) continue;
       expect(addons.kind, t.id).toBe('multi');
-      if (addons.kind === 'multi') expect(addons.choices.length, t.id).toBeLessThanOrEqual(3);
+      if (addons.kind === 'multi')
+        expect(addons.choices.length, t.id).toBeLessThanOrEqual(3);
     }
   });
 

@@ -38,7 +38,10 @@ export function userScript(script: string): string {
 /** Minimal child-process surface ProcessRunner needs; node's spawn satisfies it. */
 export interface SpawnedProcess {
   once(event: 'error', listener: (err: Error) => void): unknown;
-  once(event: 'close', listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
+  once(
+    event: 'close',
+    listener: (code: number | null, signal: NodeJS.Signals | null) => void,
+  ): unknown;
 }
 
 export type SpawnFn = (
@@ -85,7 +88,18 @@ export class ProcessRunner implements Runner {
     const { user, home } = this.ctx;
     return this.exec(
       'runuser',
-      ['-u', user, '--', 'env', `HOME=${home}`, `USER=${user}`, `LOGNAME=${user}`, 'bash', '-lc', wrapped],
+      [
+        '-u',
+        user,
+        '--',
+        'env',
+        `HOME=${home}`,
+        `USER=${user}`,
+        `LOGNAME=${user}`,
+        'bash',
+        '-lc',
+        wrapped,
+      ],
       label,
     );
   }
@@ -98,10 +112,15 @@ export class ProcessRunner implements Runner {
 
   private ensureSudo(): Promise<void> {
     if (!this.sudoReady) {
-      this.sudoReady = this.exec('sudo', ['-v'], 'sudo authentication').then(() => {
-        this.refreshTimer = setInterval(() => this.refreshSudo(), this.sudoRefreshMs);
-        this.refreshTimer.unref();
-      });
+      this.sudoReady = this.exec('sudo', ['-v'], 'sudo authentication').then(
+        () => {
+          this.refreshTimer = setInterval(
+            () => this.refreshSudo(),
+            this.sudoRefreshMs,
+          );
+          this.refreshTimer.unref();
+        },
+      );
       // A failed authentication may be retried on the next root step.
       this.sudoReady.catch(() => {
         this.sudoReady = undefined;
@@ -113,7 +132,10 @@ export class ProcessRunner implements Runner {
   private refreshSudo(): void {
     try {
       // Best effort: a failed refresh surfaces as a prompt or failure on the next sudo step.
-      this.spawn('sudo', ['-n', '-v'], { stdio: 'ignore' }).once('error', () => undefined);
+      this.spawn('sudo', ['-n', '-v'], { stdio: 'ignore' }).once(
+        'error',
+        () => undefined,
+      );
     } catch {
       // ignore: see above
     }
@@ -128,7 +150,9 @@ export class ProcessRunner implements Runner {
         reject(new StepError(label, null, { cause }));
         return;
       }
-      child.once('error', (cause) => reject(new StepError(label, null, { cause })));
+      child.once('error', (cause) =>
+        reject(new StepError(label, null, { cause })),
+      );
       child.once('close', (code, signal) => {
         if (code === 0) resolve();
         else reject(new StepError(label, code, { signal }));

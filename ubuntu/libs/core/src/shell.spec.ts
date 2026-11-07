@@ -29,7 +29,9 @@ describe('shQuote', () => {
 
   it.skipIf(!hasBash)('round-trips hostile values through bash', () => {
     const value = `a b'c"$HOME\`id\`;\n\\x`;
-    const out = spawnSync('bash', ['-c', `printf '%s' ${shQuote(value)}`], { encoding: 'utf8' });
+    const out = spawnSync('bash', ['-c', `printf '%s' ${shQuote(value)}`], {
+      encoding: 'utf8',
+    });
     expect(out.stdout).toBe(value);
   });
 });
@@ -115,8 +117,12 @@ describe('addRcBlock', () => {
 
       writeFileSync(join(home, '.zshrc'), 'eval "$(jenv init -)"\n');
       run(addRcBlock('jenv', 'x', 'jenv init'));
-      expect(readFileSync(join(home, '.zshrc'), 'utf8')).toBe('eval "$(jenv init -)"\n');
-      expect(readFileSync(join(home, '.bashrc'), 'utf8')).toContain('# >>> jenv >>>\nx\n# <<< jenv <<<\n');
+      expect(readFileSync(join(home, '.zshrc'), 'utf8')).toBe(
+        'eval "$(jenv init -)"\n',
+      );
+      expect(readFileSync(join(home, '.bashrc'), 'utf8')).toContain(
+        '# >>> jenv >>>\nx\n# <<< jenv <<<\n',
+      );
     });
   });
 });
@@ -147,7 +153,10 @@ describe.skipIf(!hasBash)('bash -n on every builder output', () => {
     aptInstall: aptInstall(['gcc', "odd'name"]),
     addRcBlock: addRcBlock('pyenv', 'export A="$HOME"\neval "$(pyenv init -)"'),
     addRcBlockSkip: addRcBlock('jenv', "it's", 'jenv (init|enable)'),
-    writeProfile: writeProfile('flutter', 'export PATH="/opt/flutter/bin:$PATH"\n# it\'s fine'),
+    writeProfile: writeProfile(
+      'flutter',
+      'export PATH="/opt/flutter/bin:$PATH"\n# it\'s fine',
+    ),
     rootScript: rootScript(aptInstall(['make'])),
     userScript: userScript(addRcBlock('x', 'y')),
   };

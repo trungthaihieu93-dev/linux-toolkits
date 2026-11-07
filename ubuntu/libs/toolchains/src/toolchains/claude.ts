@@ -6,7 +6,11 @@ export const claude: Toolchain = {
   label: 'Claude Code CLI',
   description: 'native installer, latest release',
   options: [],
-  async install() {
-    throw new Error('not implemented');
+  async install(ic) {
+    ic.logger.log('Installing Claude Code (native installer, latest)');
+    await ic.runner.asUser(
+      'curl -fsSL https://claude.ai/install.sh | bash; claude --version',
+      'claude: native installer',
+    );
   },
 };

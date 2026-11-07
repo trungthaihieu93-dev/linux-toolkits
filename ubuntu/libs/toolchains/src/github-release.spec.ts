@@ -14,30 +14,51 @@ function fakeFetch(respond: () => Response | Promise<Response>) {
 }
 
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 
 describe('latestRelease', () => {
   it('returns tag_name from the GitHub API', async () => {
     const { fn, urls } = fakeFetch(() => json({ tag_name: 'v0.24.1' }));
     const warn = vi.fn();
-    await expect(latestRelease('jesseduffield/lazydocker', 'v0.23.0', fn, { onWarn: warn })).resolves.toBe('v0.24.1');
-    expect(urls).toEqual(['https://api.github.com/repos/jesseduffield/lazydocker/releases/latest']);
+    await expect(
+      latestRelease('jesseduffield/lazydocker', 'v0.23.0', fn, {
+        onWarn: warn,
+      }),
+    ).resolves.toBe('v0.24.1');
+    expect(urls).toEqual([
+      'https://api.github.com/repos/jesseduffield/lazydocker/releases/latest',
+    ]);
     expect(warn).not.toHaveBeenCalled();
   });
 
   it.each([
     ['HTTP errors', () => json({ message: 'rate limited' }, 403), 'HTTP 403'],
     ['a missing tag', () => json({}), 'response has no usable tag_name'],
-    ['an unsafe tag', () => json({ tag_name: 'v1; rm -rf /' }), 'response has no usable tag_name'],
+    [
+      'an unsafe tag',
+      () => json({ tag_name: 'v1; rm -rf /' }),
+      'response has no usable tag_name',
+    ],
     ['invalid JSON', () => new Response('<html>'), 'JSON'],
-    ['network errors', () => Promise.reject(new Error('getaddrinfo ENOTFOUND')), 'ENOTFOUND'],
+    [
+      'network errors',
+      () => Promise.reject(new Error('getaddrinfo ENOTFOUND')),
+      'ENOTFOUND',
+    ],
   ])('falls back on %s with a warning', async (_name, respond, reason) => {
     const { fn } = fakeFetch(respond);
     const warn = vi.fn();
-    await expect(latestRelease('wagoodman/dive', 'v0.12.0', fn, { onWarn: warn })).resolves.toBe('v0.12.0');
+    await expect(
+      latestRelease('wagoodman/dive', 'v0.12.0', fn, { onWarn: warn }),
+    ).resolves.toBe('v0.12.0');
     expect(warn).toHaveBeenCalledTimes(1);
     const message = String(warn.mock.calls[0]?.[0]);
-    expect(message).toContain('could not resolve the latest wagoodman/dive release (');
+    expect(message).toContain(
+      'could not resolve the latest wagoodman/dive release (',
+    );
     expect(message).toContain(reason);
     expect(message).toContain('using v0.12.0');
   });
@@ -49,8 +70,12 @@ describe('latestRelease', () => {
 
   it('rejects invalid repo and fallback values', async () => {
     const { fn } = fakeFetch(() => json({}));
-    await expect(latestRelease('not-a-repo', 'v1', fn)).rejects.toThrow('invalid GitHub repo');
-    await expect(latestRelease('a/b', '$(x)', fn)).rejects.toThrow('invalid fallback tag');
+    await expect(latestRelease('not-a-repo', 'v1', fn)).rejects.toThrow(
+      'invalid GitHub repo',
+    );
+    await expect(latestRelease('a/b', '$(x)', fn)).rejects.toThrow(
+      'invalid fallback tag',
+    );
   });
 });
 
@@ -63,7 +88,8 @@ describe('installGithubBinary', () => {
   it('tar.gz with a checksums file', () => {
     const script = installGithubBinary({
       url: 'https://github.com/jesseduffield/lazydocker/releases/download/v0.24.1/lazydocker_0.24.1_Linux_x86_64.tar.gz',
-      sha256Url: 'https://github.com/jesseduffield/lazydocker/releases/download/v0.24.1/checksums.txt',
+      sha256Url:
+        'https://github.com/jesseduffield/lazydocker/releases/download/v0.24.1/checksums.txt',
       binName: 'lazydocker',
       archive: 'tar.gz',
     });
@@ -74,11 +100,17 @@ describe('installGithubBinary', () => {
     expect(script).toContain(
       `curl -fsSL --retry 3 -o "$tmp"/'lazydocker_0.24.1_Linux_x86_64.tar.gz' 'https://github.com/jesseduffield/`,
     );
-    expect(script).toContain(`curl -fsSL --retry 3 -o "$tmp/checksums" 'https://github.com/`);
+    expect(script).toContain(
+      `curl -fsSL --retry 3 -o "$tmp/checksums" 'https://github.com/`,
+    );
     expect(script).toContain(`sha256sum -c --quiet -`);
-    expect(script).toContain(`tar -xzf "$tmp"/'lazydocker_0.24.1_Linux_x86_64.tar.gz' -C "$tmp/x"`);
+    expect(script).toContain(
+      `tar -xzf "$tmp"/'lazydocker_0.24.1_Linux_x86_64.tar.gz' -C "$tmp/x"`,
+    );
     expect(script).toContain(`src="$tmp/x"/'lazydocker'`);
-    expect(script).toContain(`install -m 0755 "$src" '/usr/local/bin/lazydocker'`);
+    expect(script).toContain(
+      `install -m 0755 "$src" '/usr/local/bin/lazydocker'`,
+    );
     expect(bashSyntaxOk(script)).toBe(true);
   });
 
@@ -100,7 +132,8 @@ describe('installGithubBinary', () => {
   it('raw binary', () => {
     const script = installGithubBinary({
       url: 'https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64',
-      sha256Url: 'https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64.sha256',
+      sha256Url:
+        'https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64.sha256',
       binName: 'hadolint',
       archive: 'raw',
     });
@@ -110,14 +143,32 @@ describe('installGithubBinary', () => {
   });
 
   it('rejects unsafe input', () => {
-    const base = { url: 'https://example.com/a.tar.gz', binName: 'a', archive: 'tar.gz' as const };
-    expect(() => installGithubBinary({ ...base, url: 'http://example.com/a.tar.gz' })).toThrow('must use https');
-    expect(() => installGithubBinary({ ...base, url: 'nope' })).toThrow('invalid asset URL');
-    expect(() => installGithubBinary({ ...base, url: 'https://example.com/' })).toThrow('cannot derive an asset name');
-    expect(() => installGithubBinary({ ...base, sha256Url: 'ftp://x/y' })).toThrow('checksum URL must use https');
-    expect(() => installGithubBinary({ ...base, binName: '../x' })).toThrow('invalid binary name');
-    expect(() => installGithubBinary({ ...base, dest: 'bin' })).toThrow('dest must be absolute');
-    expect(() => installGithubBinary({ ...base, innerPath: '../../etc/passwd' })).toThrow('innerPath must be relative');
+    const base = {
+      url: 'https://example.com/a.tar.gz',
+      binName: 'a',
+      archive: 'tar.gz' as const,
+    };
+    expect(() =>
+      installGithubBinary({ ...base, url: 'http://example.com/a.tar.gz' }),
+    ).toThrow('must use https');
+    expect(() => installGithubBinary({ ...base, url: 'nope' })).toThrow(
+      'invalid asset URL',
+    );
+    expect(() =>
+      installGithubBinary({ ...base, url: 'https://example.com/' }),
+    ).toThrow('cannot derive an asset name');
+    expect(() =>
+      installGithubBinary({ ...base, sha256Url: 'ftp://x/y' }),
+    ).toThrow('checksum URL must use https');
+    expect(() => installGithubBinary({ ...base, binName: '../x' })).toThrow(
+      'invalid binary name',
+    );
+    expect(() => installGithubBinary({ ...base, dest: 'bin' })).toThrow(
+      'dest must be absolute',
+    );
+    expect(() =>
+      installGithubBinary({ ...base, innerPath: '../../etc/passwd' }),
+    ).toThrow('innerPath must be relative');
   });
 });
 
@@ -135,7 +186,12 @@ describe('installGithubBinary checksum lookup', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ghr-spec-'));
     try {
       writeFileSync(join(dir, 'checksums'), sums);
-      return execFileSync('bash', ['-c', `tmp="$1"; ${awkLine}; printf '%s' "$expected"`, 'bash', dir]).toString();
+      return execFileSync('bash', [
+        '-c',
+        `tmp="$1"; ${awkLine}; printf '%s' "$expected"`,
+        'bash',
+        dir,
+      ]).toString();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

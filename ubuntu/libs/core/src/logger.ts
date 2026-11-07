@@ -15,11 +15,16 @@ export interface Logger {
 }
 
 /** Same styling as log/warn/err in install-toolchains.sh. Honours NO_COLOR via chalk. */
-export function createLogger(out: LogSink = process.stdout, err: LogSink = process.stderr): Logger {
+export function createLogger(
+  out: LogSink = process.stdout,
+  err: LogSink = process.stderr,
+): Logger {
   return {
     log: (message) => void out.write(`${chalk.blue.bold('==>')} ${message}\n`),
-    warn: (message) => void err.write(`${chalk.yellow.bold('[warn]')} ${message}\n`),
-    error: (message) => void err.write(`${chalk.red.bold('[error]')} ${message}\n`),
+    warn: (message) =>
+      void err.write(`${chalk.yellow.bold('[warn]')} ${message}\n`),
+    error: (message) =>
+      void err.write(`${chalk.red.bold('[error]')} ${message}\n`),
   };
 }
 

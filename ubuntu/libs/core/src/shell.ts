@@ -44,7 +44,8 @@ export function profilePath(name: string): string {
  * Always exits 0. Runs as root.
  */
 export function aptInstall(pkgs: readonly string[]): string {
-  if (pkgs.length === 0) throw new Error('aptInstall needs at least one package');
+  if (pkgs.length === 0)
+    throw new Error('aptInstall needs at least one package');
   const quoted = pkgs.map(shQuote).join(' ');
   return [
     `if ! apt-get install -y --no-install-recommends ${quoted}; then`,
@@ -61,7 +62,11 @@ export function aptInstall(pkgs: readonly string[]): string {
  * do not exist are skipped; so are files matching `skipRegex` (an ERE, e.g. an
  * installer's own edit). Runs as the target user ($HOME is the target home).
  */
-export function addRcBlock(name: string, body: string, skipRegex?: string): string {
+export function addRcBlock(
+  name: string,
+  body: string,
+  skipRegex?: string,
+): string {
   assertName(name);
   // Same as `block=$(cat)` in bash: trailing newlines are dropped.
   const block = body.replace(/\n+$/, '');
@@ -70,7 +75,8 @@ export function addRcBlock(name: string, body: string, skipRegex?: string): stri
     '  [ -f "$f" ] || continue',
     `  grep -qF ${shQuote(rcBlockStart(name))} "$f" && continue`,
   ];
-  if (skipRegex) lines.push(`  grep -qE ${shQuote(skipRegex)} "$f" && continue`);
+  if (skipRegex)
+    lines.push(`  grep -qE ${shQuote(skipRegex)} "$f" && continue`);
   lines.push(
     `  printf '\\n# >>> %s >>>\\n%s\\n# <<< %s <<<\\n' ${shQuote(name)} ${shQuote(block)} ${shQuote(name)} >> "$f"`,
     'done',

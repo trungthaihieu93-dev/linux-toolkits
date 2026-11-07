@@ -22,19 +22,29 @@ export async function latestRelease(
   fetchFn: typeof fetch = fetch,
   options: LatestReleaseOptions = {},
 ): Promise<string> {
-  if (!REPO_RE.test(repo)) throw new Error(`invalid GitHub repo: ${JSON.stringify(repo)}`);
-  if (!TAG_RE.test(fallbackTag)) throw new Error(`invalid fallback tag: ${JSON.stringify(fallbackTag)}`);
+  if (!REPO_RE.test(repo))
+    throw new Error(`invalid GitHub repo: ${JSON.stringify(repo)}`);
+  if (!TAG_RE.test(fallbackTag))
+    throw new Error(`invalid fallback tag: ${JSON.stringify(fallbackTag)}`);
 
   let reason: string;
   try {
-    const res = await fetchFn(`https://api.github.com/repos/${repo}/releases/latest`, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'linux-toolchain' },
-      signal: AbortSignal.timeout(options.timeoutMs ?? 15_000),
-    });
+    const res = await fetchFn(
+      `https://api.github.com/repos/${repo}/releases/latest`,
+      {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'linux-toolchain',
+        },
+        signal: AbortSignal.timeout(options.timeoutMs ?? 15_000),
+      },
+    );
     if (res.ok) {
       const body: unknown = await res.json();
       const tag =
-        body && typeof body === 'object' && 'tag_name' in body ? (body as { tag_name: unknown }).tag_name : undefined;
+        body && typeof body === 'object' && 'tag_name' in body
+          ? (body as { tag_name: unknown }).tag_name
+          : undefined;
       if (typeof tag === 'string' && TAG_RE.test(tag)) return tag;
       reason = 'response has no usable tag_name';
     } else {
@@ -43,7 +53,9 @@ export async function latestRelease(
   } catch (error) {
     reason = error instanceof Error ? error.message : String(error);
   }
-  options.onWarn?.(`could not resolve the latest ${repo} release (${reason}); using ${fallbackTag}`);
+  options.onWarn?.(
+    `could not resolve the latest ${repo} release (${reason}); using ${fallbackTag}`,
+  );
   return fallbackTag;
 }
 
@@ -68,7 +80,8 @@ function assertHttps(url: string, what: string): URL {
   } catch {
     throw new Error(`invalid ${what}: ${JSON.stringify(url)}`);
   }
-  if (parsed.protocol !== 'https:') throw new Error(`${what} must use https: ${url}`);
+  if (parsed.protocol !== 'https:')
+    throw new Error(`${what} must use https: ${url}`);
   return parsed;
 }
 
@@ -78,14 +91,20 @@ function assertHttps(url: string, what: string): URL {
  * mode 0755. Runs in a subshell so its temp-dir trap and `set -e` stay local.
  */
 export function installGithubBinary(spec: GithubBinarySpec): string {
-  const asset = decodeURIComponent(assertHttps(spec.url, 'asset URL').pathname.split('/').pop() ?? '');
-  if (!BIN_RE.test(asset)) throw new Error(`cannot derive an asset name from ${spec.url}`);
-  if (!BIN_RE.test(spec.binName)) throw new Error(`invalid binary name: ${JSON.stringify(spec.binName)}`);
+  const asset = decodeURIComponent(
+    assertHttps(spec.url, 'asset URL').pathname.split('/').pop() ?? '',
+  );
+  if (!BIN_RE.test(asset))
+    throw new Error(`cannot derive an asset name from ${spec.url}`);
+  if (!BIN_RE.test(spec.binName))
+    throw new Error(`invalid binary name: ${JSON.stringify(spec.binName)}`);
   const dest = spec.dest ?? '/usr/local/bin';
   if (!dest.startsWith('/')) throw new Error(`dest must be absolute: ${dest}`);
   const inner = spec.innerPath ?? spec.binName;
   if (inner.startsWith('/') || inner.split('/').includes('..')) {
-    throw new Error(`innerPath must be relative and stay inside the archive: ${inner}`);
+    throw new Error(
+      `innerPath must be relative and stay inside the archive: ${inner}`,
+    );
   }
 
   const file = `"$tmp"/${shQuote(asset)}`;
@@ -108,10 +127,18 @@ export function installGithubBinary(spec: GithubBinarySpec): string {
   }
   switch (spec.archive) {
     case 'tar.gz':
-      lines.push('mkdir "$tmp/x"', `tar -xzf ${file} -C "$tmp/x"`, `src="$tmp/x"/${shQuote(inner)}`);
+      lines.push(
+        'mkdir "$tmp/x"',
+        `tar -xzf ${file} -C "$tmp/x"`,
+        `src="$tmp/x"/${shQuote(inner)}`,
+      );
       break;
     case 'zip':
-      lines.push('mkdir "$tmp/x"', `unzip -q ${file} -d "$tmp/x"`, `src="$tmp/x"/${shQuote(inner)}`);
+      lines.push(
+        'mkdir "$tmp/x"',
+        `unzip -q ${file} -d "$tmp/x"`,
+        `src="$tmp/x"/${shQuote(inner)}`,
+      );
       break;
     case 'raw':
       lines.push(`src=${file}`);

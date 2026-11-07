@@ -11,11 +11,17 @@ function validValues(option: Option): string {
 }
 
 /** Parse and validate one raw `--opt` value against its option. */
-export function parseValue(toolchainId: string, option: Option, raw: string): ChoiceValue {
+export function parseValue(
+  toolchainId: string,
+  option: Option,
+  raw: string,
+): ChoiceValue {
   const where = `${toolchainId}.${option.key}`;
   const value = raw.trim();
   const invalid = (bad: string) =>
-    new Error(`invalid value for ${where}: "${bad}" (valid: ${validValues(option)})`);
+    new Error(
+      `invalid value for ${where}: "${bad}" (valid: ${validValues(option)})`,
+    );
 
   switch (option.kind) {
     case 'confirm': {
@@ -42,10 +48,14 @@ export function parseValue(toolchainId: string, option: Option, raw: string): Ch
       }
       const min = option.min ?? 0;
       if (picked.length < min) {
-        throw new Error(`${where} needs at least ${min} value(s) (valid: ${validValues(option)})`);
+        throw new Error(
+          `${where} needs at least ${min} value(s) (valid: ${validValues(option)})`,
+        );
       }
       // Keep choice order so output is stable regardless of how the user typed it.
-      return option.choices.map((c) => c.value).filter((v) => picked.includes(v));
+      return option.choices
+        .map((c) => c.value)
+        .filter((v) => picked.includes(v));
     }
   }
 }
@@ -64,13 +74,17 @@ export function parseOpts(
     const eq = entry.indexOf('=');
     const dot = entry.indexOf('.');
     if (eq < 0 || dot < 0 || dot > eq) {
-      throw new Error(`invalid option "${entry}" (expected id.key=value, e.g. java.jdk=17,21)`);
+      throw new Error(
+        `invalid option "${entry}" (expected id.key=value, e.g. java.jdk=17,21)`,
+      );
     }
     const id = entry.slice(0, dot).trim();
     const key = entry.slice(dot + 1, eq).trim();
     const toolchain = catalog.find((t) => t.id === id);
     if (!toolchain) {
-      throw new Error(`unknown toolchain in option "${entry}": ${id} (valid: ${catalog.map((t) => t.id).join(', ')})`);
+      throw new Error(
+        `unknown toolchain in option "${entry}": ${id} (valid: ${catalog.map((t) => t.id).join(', ')})`,
+      );
     }
     const option = toolchain.options.find((o) => o.key === key);
     if (!option) {
@@ -90,20 +104,26 @@ export function parseOpts(
 export function defaultsFor(toolchain: Toolchain): Choices {
   const choices: Choices = {};
   for (const option of toolchain.options) {
-    choices[option.key] = Array.isArray(option.default) ? [...option.default] : option.default;
+    choices[option.key] = Array.isArray(option.default)
+      ? [...option.default]
+      : option.default;
   }
   return choices;
 }
 
 /** Overrides replace defaults key by key. */
-export function mergeChoices(defaults: Choices, overrides: Choices = {}): Choices {
+export function mergeChoices(
+  defaults: Choices,
+  overrides: Choices = {},
+): Choices {
   return { ...defaults, ...overrides };
 }
 
 /** Typed accessors for installers; they throw if the key is missing or has the wrong kind. */
 export function choiceString(choices: Choices, key: string): string {
   const value = choices[key];
-  if (typeof value !== 'string') throw new Error(`option ${key}: expected a single value`);
+  if (typeof value !== 'string')
+    throw new Error(`option ${key}: expected a single value`);
   return value;
 }
 
@@ -115,6 +135,7 @@ export function choiceList(choices: Choices, key: string): string[] {
 
 export function choiceBool(choices: Choices, key: string): boolean {
   const value = choices[key];
-  if (typeof value !== 'boolean') throw new Error(`option ${key}: expected true/false`);
+  if (typeof value !== 'boolean')
+    throw new Error(`option ${key}: expected true/false`);
   return value;
 }

@@ -1,3 +1,5 @@
+import { shQuote } from '@linux-toolchain/core';
+import { choiceList } from '../options';
 import type { Toolchain } from '../types';
 
 /**
@@ -32,7 +34,26 @@ export const bunTools: Toolchain = {
       default: [...BUN_TOOL_PACKAGES],
     },
   ],
-  async install() {
-    throw new Error('not implemented');
+  async install(ic, choices) {
+    const packages = choiceList(choices, 'packages');
+    if (packages.length === 0) {
+      ic.logger.log('bun-tools: no packages selected, nothing to install');
+      return;
+    }
+    ic.logger.log('Installing global CLIs with bun');
+    await ic.runner.asUser(
+      [
+        'command -v bun >/dev/null || { echo "bun not found; select nvm-bun first" >&2; exit 1; }',
+        'failed=""',
+        `for p in ${packages.map(shQuote).join(' ')}; do`,
+        '  echo "--> bun add -g $p@latest"',
+        '  bun add -g "$p@latest" </dev/null || failed="$failed $p"',
+        'done',
+        '# let packages that download platform binaries in postinstall do so',
+        'bun pm -g trust --all </dev/null >/dev/null 2>&1 || true',
+        '[ -z "$failed" ] || { echo "FAILED packages:$failed" >&2; exit 1; }',
+      ].join('\n'),
+      'bun-tools: bun add -g',
+    );
   },
 };

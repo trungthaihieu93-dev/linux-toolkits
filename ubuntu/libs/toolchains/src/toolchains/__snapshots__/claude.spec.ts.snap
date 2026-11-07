@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`claude > runs the native installer as the user, like install-toolchains.sh (parity) 1`] = `
+[
+  {
+    "as": "user",
+    "label": "claude: native installer",
+    "script": "curl -fsSL https://claude.ai/install.sh | bash; claude --version",
+  },
+]
+`;

@@ -26,7 +26,9 @@ export async function resolveSelection(
   const byId = new Map(catalog.map((t) => [t.id, t]));
   for (const id of ids) {
     if (!byId.has(id)) {
-      throw new Error(`unknown component: ${id} (valid: ${catalog.map((t) => t.id).join(', ')})`);
+      throw new Error(
+        `unknown component: ${id} (valid: ${catalog.map((t) => t.id).join(', ')})`,
+      );
     }
   }
 
@@ -34,7 +36,8 @@ export async function resolveSelection(
   const notes: string[] = [];
   const presence = new Map<string, boolean>();
   const isPresent = async (t: Toolchain): Promise<boolean> => {
-    if (!presence.has(t.id)) presence.set(t.id, t.isPresent ? await t.isPresent(probes) : false);
+    if (!presence.has(t.id))
+      presence.set(t.id, t.isPresent ? await t.isPresent(probes) : false);
     return presence.get(t.id) === true;
   };
 
@@ -44,11 +47,19 @@ export async function resolveSelection(
     changed = false;
     for (const t of catalog) {
       if (!selected.has(t.id)) continue;
-      const addons = mergeChoices(defaultsFor(t), choicesById.get(t.id))['addons'];
+      const addons = mergeChoices(defaultsFor(t), choicesById.get(t.id))[
+        'addons'
+      ];
       for (const [addon, target] of Object.entries(t.addonImplies ?? {})) {
-        if (Array.isArray(addons) && addons.includes(addon) && !selected.has(target)) {
+        if (
+          Array.isArray(addons) &&
+          addons.includes(addon) &&
+          !selected.has(target)
+        ) {
           selected.add(target);
-          notes.push(`adding ${target} (selected by the ${t.id} add-on ${addon})`);
+          notes.push(
+            `adding ${target} (selected by the ${t.id} add-on ${addon})`,
+          );
           changed = true;
         }
       }
@@ -57,11 +68,16 @@ export async function resolveSelection(
         if (!dep) throw new Error(`${t.id} requires unknown component ${req}`);
         if (selected.has(req) || (await isPresent(dep))) continue;
         selected.add(req);
-        notes.push(`adding ${req} (required by ${t.id}, not found for ${probes.ctx.user})`);
+        notes.push(
+          `adding ${req} (required by ${t.id}, not found for ${probes.ctx.user})`,
+        );
         changed = true;
       }
     }
   }
 
-  return { ids: catalog.map((t) => t.id).filter((id) => selected.has(id)), notes };
+  return {
+    ids: catalog.map((t) => t.id).filter((id) => selected.has(id)),
+    notes,
+  };
 }

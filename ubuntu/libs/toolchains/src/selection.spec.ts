@@ -1,7 +1,9 @@
 import { resolveSelection } from './selection';
 import type { Choices, Probes, Toolchain } from './types';
 
-function probes(opts: { bun?: boolean; jdk?: boolean } = {}): Probes & { calls: string[] } {
+function probes(
+  opts: { bun?: boolean; jdk?: boolean } = {},
+): Probes & { calls: string[] } {
   const calls: string[] = [];
   return {
     calls,
@@ -12,7 +14,9 @@ function probes(opts: { bun?: boolean; jdk?: boolean } = {}): Probes & { calls: 
     },
     listDir: (path) => {
       calls.push(`listDir ${path}`);
-      return path === '/usr/lib/jvm' && opts.jdk ? ['default-java', 'java-21-openjdk-amd64'] : ['default-java'];
+      return path === '/usr/lib/jvm' && opts.jdk
+        ? ['default-java', 'java-21-openjdk-amd64']
+        : ['default-java'];
     },
   };
 }
@@ -21,7 +25,11 @@ const none = new Map<string, Choices>();
 
 describe('resolveSelection', () => {
   it('returns catalog order without duplicates', async () => {
-    const sel = await resolveSelection(['docker', 'go', 'go', 'claude'], none, probes());
+    const sel = await resolveSelection(
+      ['docker', 'go', 'go', 'claude'],
+      none,
+      probes(),
+    );
     expect(sel).toEqual({ ids: ['go', 'docker', 'claude'], notes: [] });
   });
 
@@ -29,18 +37,29 @@ describe('resolveSelection', () => {
     const p = probes();
     const sel = await resolveSelection(['bun-tools'], none, p);
     expect(sel.ids).toEqual(['nvm-bun', 'bun-tools']);
-    expect(sel.notes).toEqual(['adding nvm-bun (required by bun-tools, not found for alice)']);
+    expect(sel.notes).toEqual([
+      'adding nvm-bun (required by bun-tools, not found for alice)',
+    ]);
     expect(p.calls).toContain('exists /home/alice/.bun/bin/bun');
   });
 
   it('skips nvm-bun when bun exists in the target home', async () => {
-    const sel = await resolveSelection(['bun-tools'], none, probes({ bun: true }));
+    const sel = await resolveSelection(
+      ['bun-tools'],
+      none,
+      probes({ bun: true }),
+    );
     expect(sel).toEqual({ ids: ['bun-tools'], notes: [] });
   });
 
   it('adds java for jenv only when no JDK is in /usr/lib/jvm', async () => {
-    expect((await resolveSelection(['jenv'], none, probes())).ids).toEqual(['java', 'jenv']);
-    expect((await resolveSelection(['jenv'], none, probes({ jdk: true }))).ids).toEqual(['jenv']);
+    expect((await resolveSelection(['jenv'], none, probes())).ids).toEqual([
+      'java',
+      'jenv',
+    ]);
+    expect(
+      (await resolveSelection(['jenv'], none, probes({ jdk: true }))).ids,
+    ).toEqual(['jenv']);
   });
 
   it('does not probe when the requirement is already selected', async () => {
@@ -51,10 +70,14 @@ describe('resolveSelection', () => {
   });
 
   it('flutter add-on android-sdk selects android', async () => {
-    const choices = new Map<string, Choices>([['flutter', { addons: ['android-sdk', 'fvm'] }]]);
+    const choices = new Map<string, Choices>([
+      ['flutter', { addons: ['android-sdk', 'fvm'] }],
+    ]);
     const sel = await resolveSelection(['flutter'], choices, probes());
     expect(sel.ids).toEqual(['flutter', 'android']);
-    expect(sel.notes).toEqual(['adding android (selected by the flutter add-on android-sdk)']);
+    expect(sel.notes).toEqual([
+      'adding android (selected by the flutter add-on android-sdk)',
+    ]);
   });
 
   it('java add-on jenv selects jenv', async () => {
@@ -75,7 +98,12 @@ describe('resolveSelection', () => {
   });
 
   it('cascades through a custom catalog and reports bad requires', async () => {
-    const stub = { label: 'x', description: 'x', options: [], install: async () => undefined };
+    const stub = {
+      label: 'x',
+      description: 'x',
+      options: [],
+      install: async () => undefined,
+    };
     const custom: Toolchain[] = [
       { ...stub, id: 'a' },
       { ...stub, id: 'b', requires: ['a'] },
@@ -84,13 +112,23 @@ describe('resolveSelection', () => {
         id: 'c',
         addonImplies: { extra: 'b' },
         options: [
-          { key: 'addons', kind: 'multi', label: 'x', choices: [{ value: 'extra', label: 'x' }], default: ['extra'] },
+          {
+            key: 'addons',
+            kind: 'multi',
+            label: 'x',
+            choices: [{ value: 'extra', label: 'x' }],
+            default: ['extra'],
+          },
         ],
       },
     ];
-    expect((await resolveSelection(['c'], none, probes(), custom)).ids).toEqual(['a', 'b', 'c']);
+    expect((await resolveSelection(['c'], none, probes(), custom)).ids).toEqual(
+      ['a', 'b', 'c'],
+    );
     await expect(
-      resolveSelection(['z'], none, probes(), [{ ...stub, id: 'z', requires: ['y'] }]),
+      resolveSelection(['z'], none, probes(), [
+        { ...stub, id: 'z', requires: ['y'] },
+      ]),
     ).rejects.toThrow('z requires unknown component y');
   });
 });

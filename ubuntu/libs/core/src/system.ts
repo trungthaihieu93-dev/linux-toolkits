@@ -28,7 +28,9 @@ function defaultIsExecutable(file: string): boolean {
   }
 }
 
-export function hasApt(check: (cmd: string) => boolean = (cmd) => hasCommand(cmd)): boolean {
+export function hasApt(
+  check: (cmd: string) => boolean = (cmd) => hasCommand(cmd),
+): boolean {
   return check('apt-get');
 }
 
@@ -45,7 +47,11 @@ export function osRelease(
     const key = line.slice(0, eq);
     let value = line.slice(eq + 1);
     const quote = value[0];
-    if ((quote === '"' || quote === "'") && value.endsWith(quote) && value.length >= 2) {
+    if (
+      (quote === '"' || quote === "'") &&
+      value.endsWith(quote) &&
+      value.length >= 2
+    ) {
       value = value.slice(1, -1);
       if (quote === '"') value = value.replace(/\\(["\\$`])/g, '$1');
     }
