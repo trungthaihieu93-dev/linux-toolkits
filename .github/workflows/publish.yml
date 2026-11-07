@@ -1,0 +1,102 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'linux-toolchain@*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      actions: read
+
+  publish:
+    name: Publish linux-toolchain to npm
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Required for npm provenance attestations.
+      id-token: write
+    defaults:
+      run:
+        working-directory: ubuntu
+    env:
+      NX_NO_CLOUD: 'true'
+      NX_DAEMON: 'false'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ubuntu/package-lock.json
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify tag matches package version
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          tag_version="${TAG#linux-toolchain@}"
+          pkg_version=$(node -p "require('./apps/linux-toolchain/package.json').version")
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "::error::Tag $TAG does not match apps/linux-toolchain/package.json version $pkg_version"
+            exit 1
+          fi
+          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if already published
+        id: existing
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if published=$(npm view "linux-toolchain@$VERSION" version 2>/dev/null) && [ "$published" = "$VERSION" ]; then
+            echo "::notice::linux-toolchain@$VERSION is already on npm; skipping publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.existing.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Build package
+        if: steps.existing.outputs.skip != 'true'
+        run: npx nx build linux-toolchain
+
+      - name: Publish
+        if: steps.existing.outputs.skip != 'true'
+        working-directory: ubuntu/dist/apps/linux-toolchain
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
+
+      - name: Wait for the registry to serve the new version
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for attempt in $(seq 1 12); do
+            if [ "$(npm view "linux-toolchain@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+              echo "linux-toolchain@$VERSION is live on npm."
+              exit 0
+            fi
+            echo "Attempt $attempt: not visible yet, retrying in 10s."
+            sleep 10
+          done
+          echo "::error::linux-toolchain@$VERSION did not appear on npm within 2 minutes."
+          exit 1
