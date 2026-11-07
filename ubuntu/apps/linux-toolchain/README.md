@@ -15,6 +15,8 @@ Requires Linux with apt (Debian, Ubuntu and derivatives) and Node.js 22.13 or
 newer (or bun). The published package is a single bundled file with no runtime
 dependencies.
 
+Full documentation: <https://linux-toolkits-docs.pages.dev>.
+
 ## Usage
 
 ```text

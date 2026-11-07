@@ -1,0 +1,21 @@
+# build output
+dist/
+# generated types
+.astro/
+
+# dependencies
+node_modules/
+
+# generated from the linux-toolchain catalog at build time
+src/content/docs/ubuntu/toolchains/*.md
+src/data/toolchains.json
+
+# logs
+*.log
+
+# environment variables
+.env
+.env.production
+
+# macOS-specific files
+.DS_Store

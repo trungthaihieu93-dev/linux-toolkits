@@ -1,0 +1,152 @@
+---
+title: Usage
+description: The linux-toolchain interactive flow, every install flag, the list command and the exit codes.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+```text title="linux-toolchain --help (summary)"
+linux-toolchain [install] [ids...]    install toolchains (the default command)
+linux-toolchain list [--json]         list toolchain ids, options and add-ons
+linux-toolchain --version | --help
+```
+
+`install` is the default command, so `npx linux-toolchain java` and
+`npx linux-toolchain install java` are the same. Every example on this page
+uses `npx`; `bunx linux-toolchain` takes the same arguments.
+
+## Interactive flow
+
+Run `npx linux-toolchain` in a terminal and it asks, in order:
+
+<Steps>
+
+1. **Toolchains.** A checklist of the whole catalog. It is skipped when you
+   pass ids, `--only` or `--all`. Without ids and without a terminal, the CLI
+   stops with `no TTY for the menu; use --all or --only id,id`.
+
+2. **Options, per toolchain.** For each selected toolchain (shown as
+   `Java (2/4)`), every option is asked with its default pre-selected. Options
+   given with `--opt` are not asked again. The default JDK is only offered from
+   the JDKs chosen just before.
+
+3. **Add-ons, per toolchain.** Up to three optional extras, with the
+   recommended ones pre-checked. Options and add-ons are skipped with
+   `--defaults`, `-y`, or when stdin/stdout is not a terminal; the defaults and
+   your `--opt` values apply instead.
+
+4. **Dependencies.** Some choices add toolchains, which are then asked about
+   too: `bun-tools` adds `nvm-bun` when bun is missing, `jenv` adds `java`
+   when no JDK is in `/usr/lib/jvm`, the `java` add-on `jenv` adds `jenv`, and
+   the `flutter` add-on `android-sdk` adds `android`.
+
+5. **Android SDK licenses.** When `android` is selected, the CLI asks you to
+   accept the Android SDK licenses. Declining marks `android` as failed; the
+   rest still installs. `-y` accepts them.
+
+6. **Review.** A table of the toolchains and their choices, then `Proceed?`.
+   Answering no installs nothing and exits 0. `-y`, or a run without a
+   terminal, skips the question.
+
+7. **Install.** The toolchains install in catalog order. A failing toolchain
+   is reported and the next one still runs. The summary lists `ok`, `failed`
+   and add-on `warnings`.
+
+</Steps>
+
+## Install flags
+
+| Flag | Effect |
+| --- | --- |
+| `[ids...]` | Toolchain ids, comma or space separated. Same as `--only`. |
+| `--all` | Select every toolchain. Cannot be combined with ids or `--only`. |
+| `--only <ids>` | Comma-separated toolchain ids, for example `--only java,go`. |
+| `--opt <key=value>` | Set a sub-option as `<id>.<key>=<value>`. Repeatable. |
+| `--defaults` | Accept the default of every sub-option: no option or add-on prompts. |
+| `--user <name>` | Target user. Only when running as root (for example under `sudo npx`), or with `--dry-run`. |
+| `-y`, `--yes` | Skip the review and accept the Android SDK licenses. Also skips the option and add-on prompts, like `--defaults`. |
+| `--dry-run` | Print the root and user scripts that would run; change nothing. |
+| `-v`, `--version` | Print the CLI version. |
+| `-h`, `--help` | Print the help. |
+
+### Setting options with `--opt`
+
+`--opt` takes `<id>.<key>=<value>`. The keys, choices and defaults of every
+toolchain are in the [toolchain reference](/ubuntu/toolchains/) and in
+`npx linux-toolchain list`.
+
+- **select** options take one value: `--opt rust.toolchain=nightly`.
+- **multi** options take a comma list: `--opt java.jdk=17,21`. An empty
+  value means none: `--opt python.addons=`.
+- **yes/no** options take `true` or `false`: `--opt docker.group=false`.
+
+`--opt` may target a toolchain that another choice adds (for example `jenv`
+when you pick the `java` add-on `jenv`). An `--opt` for any other toolchain
+that is not selected is a usage error, and so is `bun-tools` together with
+`--opt nvm-bun.bun=false` when bun is not installed.
+
+### Examples
+
+All of these are dry runs. Remove `--dry-run` to install.
+
+```sh title="Terminal"
+# Java 17 + 21 with Maven and Gradle, plus Go with its default add-ons.
+npx linux-toolchain --only java,go --opt java.jdk=17,21 --opt java.addons=maven,gradle --dry-run
+
+# The same selection with positional ids, accepting every default.
+npx linux-toolchain java go --defaults --dry-run
+
+# Rust nightly without add-ons; other Rust options keep their defaults.
+npx linux-toolchain --only rust --opt rust.toolchain=nightly --opt rust.addons= --defaults --dry-run
+
+# Python without the add-ons, Docker without the docker group.
+npx linux-toolchain --only python,docker --opt python.addons= --opt docker.group=false --defaults --dry-run
+
+# Every toolchain with its defaults. -y accepts the Android SDK licenses
+# (otherwise you are asked) and skips the review.
+npx linux-toolchain --all --defaults -y --dry-run
+```
+
+<Aside type="caution" title="Installing without prompts">
+	`-y` skips the review and the option prompts, and accepts the Android SDK
+	licenses. Combined with ids, it installs with no questions at all, for
+	example `npx linux-toolchain --only go -y`. That command **installs**;
+	preview it with `--dry-run` first.
+</Aside>
+
+### Running as root
+
+Run the CLI as your normal user; it uses `sudo` only for the steps that need
+it. `sudo npx linux-toolchain` also works: user-level tools then install for
+the user who ran `sudo` (`SUDO_USER`), or for `--user <name>`.
+
+`--user` is rejected when you are not root, except with `--dry-run`, where it
+only prints the scripts for that user:
+
+```sh title="Terminal"
+npx linux-toolchain --only go --defaults --user "$(id -un)" --dry-run
+```
+
+## Listing the catalog
+
+```sh title="Terminal"
+npx linux-toolchain list          # ids, labels, descriptions and --opt keys with defaults
+npx linux-toolchain list --json   # the same catalog as JSON
+```
+
+`list --json` prints an array of toolchains in install order. Each entry has
+`id`, `label`, `description`, `requires` (toolchains it needs),
+`addonImplies` (add-on value to the toolchain it selects) and `options`. Each
+option has a `key`, a `kind` (`select`, `multi` or `confirm`), a `label`, a
+`default` and, for `select` and `multi`, `choices` of `{ value, label, hint }`.
+Add-ons are the `multi` option with the key `addons`. This site's
+[toolchain reference](/ubuntu/toolchains/) is generated from this output.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success, nothing selected, or the review was declined. |
+| `1` | A toolchain failed, `apt-get update` failed, the platform is not Linux, or the current or target user has no passwd entry or home directory. |
+| `2` | Usage error: an unknown flag or id, `--all` with ids, a bad `--opt`, an `--opt` for a toolchain that is not selected, `bun-tools` with `nvm-bun.bun=false` while bun is not installed, no TTY for the menu, or no usable target user (`--user` without root, root without `SUDO_USER` or `--user`, an unknown user). |
+| `130` | Cancelled with Ctrl+C at a prompt. |

@@ -1,0 +1,175 @@
+/*
+ * Theme tokens: the only place in the site that holds raw colour values.
+ * Components reference these tokens (or Tailwind utilities generated from them),
+ * never hex codes.
+ *
+ * The palette blocks below are intentionally unlayered: unlayered custom
+ * properties win over both Starlight's defaults (`starlight` layer) and the
+ * mapping that @astrojs/starlight-tailwind writes in the `utilities` layer.
+ * Only base palette variables are set here. Starlight derives the rest
+ * (`--sl-color-text`, `--sl-color-bg-nav`, ...) per mode from these.
+ * Every variable set in the dark block is set again in the light block, because
+ * an unlayered `:root` would otherwise override Starlight's light values.
+ *
+ * WCAG 2.x contrast, measured with a relative-luminance script
+ * (normal text needs >= 4.5:1, non-text UI >= 3:1):
+ *
+ * | Mode     | Pair (foreground / background)                  | Colours            | Ratio   |
+ * | -------- | ----------------------------------------------- | ------------------ | ------- |
+ * | dark     | heading (white) / page bg (black)               | #F8FAFC on #080B10 | 18.83:1 |
+ * | dark     | body text (gray-2) / page bg                    | #CBD5E1 on #080B10 | 13.27:1 |
+ * | dark     | body text (gray-2) / nav + sidebar (gray-6)     | #CBD5E1 on #0D1117 | 12.75:1 |
+ * | dark     | muted text (gray-3) / page bg                   | #94A3B8 on #080B10 |  7.69:1 |
+ * | dark     | muted text (gray-3) / nav + sidebar (gray-6)    | #94A3B8 on #0D1117 |  7.38:1 |
+ * | dark     | inline code (gray-1) / inline code bg (gray-5)  | #E2E8F0 on #263042 | 10.76:1 |
+ * | dark     | link (accent-high) / page bg                    | #93C5FD on #080B10 | 10.93:1 |
+ * | dark     | link (accent-high) / nav + sidebar              | #93C5FD on #0D1117 | 10.49:1 |
+ * | dark     | current page (black) / accent-high              | #080B10 on #93C5FD | 10.93:1 |
+ * | dark     | button text (accent-low) / accent-high          | #172554 on #93C5FD |  8.15:1 |
+ * | dark     | badge (accent-high) / accent-low                | #93C5FD on #172554 |  8.15:1 |
+ * | dark     | run / page bg                                   | #4ADE80 on #080B10 | 11.31:1 |
+ * | dark     | tip aside title (run-high) / run-low            | #BBF7D0 on #052E16 | 12.30:1 |
+ * | dark     | caution / page bg                               | #FB923C on #080B10 |  8.71:1 |
+ * | dark     | caution aside title (high) / caution-low        | #FED7AA on #431407 | 11.56:1 |
+ * | dark     | focus ring (accent-high) / page bg [non-text]   | #93C5FD on #080B10 | 10.93:1 |
+ * | dark     | accent border (accent) / page bg [non-text]     | #3B82F6 on #080B10 |  5.36:1 |
+ * | dark     | border (gray-4) / page bg [non-text]            | #64748B on #080B10 |  4.14:1 |
+ * | light    | heading (white) / page bg (black)               | #0B1220 on #FFFFFF | 18.72:1 |
+ * | light    | body text (gray-2) / page bg                    | #334155 on #FFFFFF | 10.35:1 |
+ * | light    | body text (gray-2) / nav (gray-7)               | #334155 on #F1F5F9 |  9.45:1 |
+ * | light    | muted text (gray-3) / page bg                   | #475569 on #FFFFFF |  7.58:1 |
+ * | light    | muted text (gray-3) / nav (gray-7)              | #475569 on #F1F5F9 |  6.92:1 |
+ * | light    | inline code (gray-1) / inline code bg (gray-6)  | #1E293B on #E2E8F0 | 11.87:1 |
+ * | light    | link (accent) / page bg                         | #2563EB on #FFFFFF |  5.17:1 |
+ * | light    | link (accent) / nav (gray-7)                    | #2563EB on #F1F5F9 |  4.72:1 |
+ * | light    | current page + button (black) / accent          | #FFFFFF on #2563EB |  5.17:1 |
+ * | light    | badge (accent-high) / accent-low                | #1E3A8A on #DBEAFE |  8.49:1 |
+ * | light    | run / page bg                                   | #15803D on #FFFFFF |  5.02:1 |
+ * | light    | tip aside title (run-high) / run-low            | #14532D on #DCFCE7 |  8.30:1 |
+ * | light    | caution / page bg                               | #C2410C on #FFFFFF |  5.18:1 |
+ * | light    | caution aside title (high) / caution-low        | #7C2D12 on #FFEDD5 |  8.18:1 |
+ * | light    | focus ring (accent) / page bg [non-text]        | #2563EB on #FFFFFF |  5.17:1 |
+ * | light    | border (gray-4) / page bg [non-text]            | #64748B on #FFFFFF |  4.76:1 |
+ * | terminal | command (term-fg) / term-bg                     | #E2E8F0 on #05070B | 16.35:1 |
+ * | terminal | prompt (term-run) / term-bg                     | #4ADE80 on #05070B | 11.57:1 |
+ * | terminal | title bar text (term-muted) / term-bar          | #94A3B8 on #0D1117 |  7.38:1 |
+ * | terminal | copy button text / copy button bg               | #F8FAFC on #1E293B | 13.98:1 |
+ * | terminal | focus ring (term-focus) / term-bg [non-text]    | #60A5FA on #05070B |  7.93:1 |
+ * | both     | CTA text (cta-fg) / CTA (cta)                   | #080B10 on #F97316 |  7.03:1 |
+ *
+ * The terminal and CTA tokens are the same in both modes: the hero terminal is
+ * always dark ("code dark, run green").
+ */
+
+@theme {
+	--font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+/* Tailwind utilities for custom components (`bg-term-bg`, `text-run`, ...). */
+@theme inline {
+	--color-run: var(--tk-run);
+	--color-caution: var(--tk-caution);
+	--color-cta: var(--tk-cta);
+	--color-cta-fg: var(--tk-cta-fg);
+	--color-term-bg: var(--tk-term-bg);
+	--color-term-bar: var(--tk-term-bar);
+	--color-term-fg: var(--tk-term-fg);
+	--color-term-muted: var(--tk-term-muted);
+	--color-term-run: var(--tk-term-run);
+	--color-term-border: var(--tk-term-border);
+	--color-term-btn: var(--tk-term-btn);
+	--color-term-btn-hover: var(--tk-term-btn-hover);
+	--color-term-focus: var(--tk-term-focus);
+	--color-heading: var(--sl-color-white);
+	--color-body: var(--sl-color-gray-2);
+}
+
+/* Dark (default) palette. */
+:root,
+::backdrop {
+	--sl-color-white: #f8fafc;
+	--sl-color-gray-1: #e2e8f0;
+	--sl-color-gray-2: #cbd5e1;
+	--sl-color-gray-3: #94a3b8;
+	--sl-color-gray-4: #64748b;
+	--sl-color-gray-5: #263042;
+	--sl-color-gray-6: #0d1117;
+	--sl-color-black: #080b10;
+
+	--sl-color-accent-low: #172554;
+	--sl-color-accent: #3b82f6;
+	--sl-color-accent-high: #93c5fd;
+
+	--tk-run-low: #052e16;
+	--tk-run: #4ade80;
+	--tk-run-high: #bbf7d0;
+	--tk-caution-low: #431407;
+	--tk-caution: #fb923c;
+	--tk-caution-high: #fed7aa;
+
+	/* Starlight hues used by asides, badges and cards, mapped onto the theme. */
+	--sl-color-blue-low: var(--sl-color-accent-low);
+	--sl-color-blue: var(--sl-color-accent);
+	--sl-color-blue-high: var(--sl-color-accent-high);
+	--sl-color-purple-low: var(--tk-run-low);
+	--sl-color-purple: var(--tk-run);
+	--sl-color-purple-high: var(--tk-run-high);
+	--sl-color-green-low: var(--tk-run-low);
+	--sl-color-green: var(--tk-run);
+	--sl-color-green-high: var(--tk-run-high);
+	--sl-color-orange-low: var(--tk-caution-low);
+	--sl-color-orange: var(--tk-caution);
+	--sl-color-orange-high: var(--tk-caution-high);
+
+	/* Mode-independent tokens: the hero terminal and the single CTA. */
+	--tk-cta: #f97316;
+	--tk-cta-fg: #080b10;
+	--tk-term-bg: #05070b;
+	--tk-term-bar: #0d1117;
+	--tk-term-fg: #e2e8f0;
+	--tk-term-muted: #94a3b8;
+	--tk-term-run: #4ade80;
+	--tk-term-border: #263042;
+	--tk-term-dots: #64748b;
+	--tk-term-btn: #1e293b;
+	--tk-term-btn-hover: #334155;
+	--tk-term-focus: #60a5fa;
+}
+
+/* Light palette. */
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+	--sl-color-white: #0b1220;
+	--sl-color-gray-1: #1e293b;
+	--sl-color-gray-2: #334155;
+	--sl-color-gray-3: #475569;
+	--sl-color-gray-4: #64748b;
+	--sl-color-gray-5: #cbd5e1;
+	--sl-color-gray-6: #e2e8f0;
+	--sl-color-gray-7: #f1f5f9;
+	--sl-color-black: #ffffff;
+
+	--sl-color-accent-low: #dbeafe;
+	--sl-color-accent: #2563eb;
+	--sl-color-accent-high: #1e3a8a;
+
+	--tk-run-low: #dcfce7;
+	--tk-run: #15803d;
+	--tk-run-high: #14532d;
+	--tk-caution-low: #ffedd5;
+	--tk-caution: #c2410c;
+	--tk-caution-high: #7c2d12;
+}
+
+/* Keep motion to the documented 150-300ms micro-interactions, and none at all when asked. */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	::before,
+	::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

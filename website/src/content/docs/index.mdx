@@ -1,0 +1,27 @@
+---
+title: toolkits
+description: Installers for developer toolchains. Start with linux-toolchain, an interactive installer for Debian and Ubuntu.
+template: splash
+editUrl: false
+lastUpdated: false
+hero:
+  title: Developer toolchains, one command away
+  tagline: An interactive installer for 13 developer toolchains on Debian and Ubuntu. Run it with <code>npx</code> or <code>bunx</code>, pick what you need, and preview every step with <code>--dry-run</code>.
+  actions:
+    - text: Get started
+      link: /ubuntu/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/trungthaihieu93-dev/linux-toolkits
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid>
+	<Card title="Ubuntu toolchains" icon="linux">
+		Install languages, runtimes and developer tools on Debian or Ubuntu with
+		one interactive command. [Read the Ubuntu toolchains guide](/ubuntu/).
+	</Card>
+</CardGrid>

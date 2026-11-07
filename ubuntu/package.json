@@ -3,9 +3,13 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "lint": "nx run-many -t lint",
-    "test": "nx run-many -t test",
-    "build": "nx run-many -t build"
+    "dev": "bun apps/linux-toolchain/src/main.ts",
+    "lint": "bun --bun nx run-many -t lint",
+    "test": "bun --bun nx run-many -t test",
+    "build": "bun --bun nx run-many -t build",
+    "e2e": "bun --bun nx run-many -t e2e",
+    "format:check": "bun --bun nx format:check --all",
+    "format": "bun --bun nx format:write"
   },
   "private": true,
   "devDependencies": {
@@ -29,11 +33,10 @@
     "nx": "24.0.5",
     "prettier": "~3.6.2",
     "tslib": "^2.3.0",
-    "tsx": "^4.20.5",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.58.0",
     "vite": "^8.0.0",
     "vitest": "~5.0.1"
   },
-  "packageManager": "npm@11.20.0"
+  "packageManager": "bun@1.4.4"
 }

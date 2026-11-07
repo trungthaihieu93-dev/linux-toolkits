@@ -1,0 +1,33 @@
+{
+  "name": "website",
+  "type": "module",
+  "version": "0.0.1",
+  "private": true,
+  "packageManager": "bun@1.4.4",
+  "scripts": {
+    "gen": "bun scripts/gen-toolchains.ts",
+    "predev": "bun run gen",
+    "dev": "bun --bun astro dev",
+    "prebuild": "bun run gen",
+    "build": "bun --bun astro build",
+    "preview": "bun --bun astro preview",
+    "precheck": "bun run gen",
+    "check": "bun --bun astro check"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.42.10",
+    "@astrojs/starlight-tailwind": "^5.0.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "astro": "^7.3.6",
+    "sharp": "^0.35.3",
+    "starlight-links-validator": "^0.27.0",
+    "tailwindcss": "^4.3.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@types/bun": "^1.4.4",
+    "typescript": "^6.0.3"
+  }
+}

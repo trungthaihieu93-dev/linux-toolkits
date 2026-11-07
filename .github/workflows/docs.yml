@@ -1,0 +1,157 @@
+name: Docs
+
+on:
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'ubuntu/apps/linux-toolchain/**'
+      - 'ubuntu/libs/**'
+      - 'ubuntu/bun.lock'
+      - 'ubuntu/package.json'
+      - 'ubuntu/tsconfig.base.json'
+      - '.github/workflows/docs.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - 'ubuntu/apps/linux-toolchain/**'
+      - 'ubuntu/libs/**'
+      - 'ubuntu/bun.lock'
+      - 'ubuntu/package.json'
+      - 'ubuntu/tsconfig.base.json'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PAGES_PROJECT: linux-toolkits-docs
+  WRANGLER_VERSION: '4.158.0'
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Starlight's "Last updated" date comes from each page's git history.
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: website/package.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-docs-${{ runner.os }}-${{ hashFiles('ubuntu/bun.lock', 'website/bun.lock') }}
+          restore-keys: bun-docs-${{ runner.os }}-
+
+      # The toolchain reference is generated from the CLI source, so the
+      # workspace dependencies (commander, chalk, ...) must be installed too.
+      - name: Install CLI workspace dependencies
+        working-directory: ubuntu
+        run: bun install --frozen-lockfile
+
+      - name: Install site dependencies
+        working-directory: website
+        run: bun install --frozen-lockfile
+
+      - name: Test generator
+        working-directory: website
+        run: bun test
+
+      - name: Type-check
+        working-directory: website
+        run: bun run check
+
+      - name: Build site
+        working-directory: website
+        run: bun run build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: site
+          path: website/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Deploy to Cloudflare Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      # Job-level `if` cannot read secrets; fork PRs get no secrets and skip.
+      CF_TOKEN_SET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    steps:
+      - name: Skip notice
+        if: env.CF_TOKEN_SET != 'true'
+        run: echo "::notice::Cloudflare secrets are not available; skipping the deploy."
+
+      - uses: actions/download-artifact@v8
+        if: env.CF_TOKEN_SET == 'true'
+        with:
+          name: site
+          path: site
+
+      - uses: oven-sh/setup-bun@v2
+        if: env.CF_TOKEN_SET == 'true'
+
+      - name: Ensure the Pages project exists
+        if: env.CF_TOKEN_SET == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -uo pipefail
+          if out=$(bunx "wrangler@$WRANGLER_VERSION" pages project create "$PAGES_PROJECT" --production-branch=main 2>&1); then
+            echo "Created Pages project $PAGES_PROJECT"
+          elif grep -qi 'already exists\|8000002' <<<"$out"; then
+            echo "Pages project $PAGES_PROJECT already exists"
+          else
+            printf '%s\n' "$out"
+            exit 1
+          fi
+
+      - name: Deploy
+        id: deploy
+        if: env.CF_TOKEN_SET == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: ${{ env.WRANGLER_VERSION }}
+          command: pages deploy site --project-name=${{ env.PAGES_PROJECT }} --branch=${{ github.head_ref || github.ref_name }} --commit-dirty=true
+
+      - name: Comment preview URL on the PR
+        if: env.CF_TOKEN_SET == 'true' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+          ALIAS: ${{ steps.deploy.outputs.pages-deployment-alias-url }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          marker='<!-- docs-preview -->'
+          body=$(printf '%s\n**Docs preview** for %s\n\n- Deployment: %s\n- Branch alias: %s\n' \
+            "$marker" "$SHA" "$URL" "${ALIAS:-n/a}")
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" >/dev/null
+          fi
+          echo "Preview: $URL"

@@ -17,6 +17,7 @@
   "os": [
     "linux"
   ],
+  "homepage": "https://linux-toolkits-docs.pages.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/trungthaihieu93-dev/linux-toolkits.git",

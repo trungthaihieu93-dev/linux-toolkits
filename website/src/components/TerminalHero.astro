@@ -1,0 +1,134 @@
+---
+/*
+ * Splash hero: Starlight's Hero (title, tagline and actions from the page's
+ * `hero` frontmatter) plus a terminal showing the install command with a copy
+ * button. The terminal is dark in both colour modes.
+ */
+import { Icon, LinkButton } from '@astrojs/starlight/components';
+
+const command = 'npx linux-toolchain';
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, actions = [] } = data.hero || {};
+
+// Same element id Starlight gives the page title, so the "skip to content" and
+// "on this page" links keep working.
+const pageTitleId = '_top';
+---
+
+<div class="grid gap-8 pt-4 pb-8 md:gap-12 md:pt-12 md:pb-14 lg:grid-cols-2 lg:items-center">
+	<div class="flex flex-col items-center gap-4 text-center lg:items-start lg:text-start">
+		<h1
+			id={pageTitleId}
+			data-page-title
+			class="max-w-[20ch] text-[clamp(var(--sl-text-3xl),calc(0.25rem+5vw),var(--sl-text-5xl))] leading-(--sl-line-height-headings) font-semibold text-heading"
+			set:html={title}
+		/>
+		{
+			tagline && (
+				<div
+					class="max-w-[52ch] text-[clamp(var(--sl-text-base),calc(0.0625rem+2vw),var(--sl-text-lg))] leading-relaxed text-body"
+					set:html={tagline}
+				/>
+			)
+		}
+		{
+			actions.length > 0 && (
+				<div class="mt-2 flex flex-wrap items-center justify-center gap-x-8 gap-y-4 lg:justify-start">
+					{actions.map(({ attrs: { class: className, ...attrs } = {}, icon, link, text, variant }) => (
+						<LinkButton
+							href={link}
+							variant={variant}
+							icon={icon?.name}
+							class:list={[
+								className,
+								// The primary action is the page's single orange call to action.
+								variant === 'primary' &&
+									'border-cta bg-cta text-cta-fg hover:text-cta-fg motion-safe:transition-[filter] motion-safe:duration-200 hover:brightness-110',
+							]}
+							{...attrs}
+						>
+							{text}
+							{icon?.html && <Fragment set:html={icon.html} />}
+						</LinkButton>
+					))}
+				</div>
+			)
+		}
+	</div>
+
+	<figure class="m-0 w-full max-w-xl justify-self-center overflow-hidden rounded-xl border border-term-border bg-term-bg">
+		<figcaption class="flex items-center gap-3 border-b border-term-border bg-term-bar px-4 py-2">
+			<span class="flex gap-1.5" aria-hidden="true">
+				<span class="size-2.5 rounded-full bg-term-border"></span>
+				<span class="size-2.5 rounded-full bg-term-border"></span>
+				<span class="size-2.5 rounded-full bg-term-border"></span>
+			</span>
+			<span class="font-mono text-xs text-term-muted">Install and run</span>
+		</figcaption>
+		<div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-5 sm:px-5 sm:py-6">
+			<code class="bg-transparent p-0 font-mono text-base text-term-fg sm:text-lg">
+				<span class="tk-prompt mr-[1ch] select-none text-term-run" aria-hidden="true">$</span>
+				{command}
+			</code>
+			<button
+				type="button"
+				class="tk-copy inline-flex min-h-11 min-w-11 cursor-pointer items-center gap-2 rounded-md border border-term-border bg-term-btn px-3 font-sans text-sm text-term-fg hover:bg-term-btn-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-term-focus motion-safe:transition-[background-color] motion-safe:duration-150"
+				data-copy-command={command}
+				aria-label={`Copy command: ${command}`}
+			>
+				<Icon name="approve-check" class="tk-copy-done hidden" />
+				<span data-copy-label>Copy</span>
+			</button>
+		</div>
+		<p class="sr-only" role="status" aria-live="polite" data-copy-status></p>
+	</figure>
+</div>
+
+<style>
+	.tk-prompt {
+		/* The only glow on the page: a soft halo on the green prompt. */
+		text-shadow: 0 0 0.75rem color-mix(in srgb, var(--tk-term-run) 55%, transparent);
+	}
+	.tk-copy[data-copied] :global(.tk-copy-done) {
+		display: inline-block;
+		color: var(--tk-term-run);
+	}
+</style>
+
+<script>
+	const RESET_AFTER_MS = 2000;
+
+	async function copyText(text: string): Promise<void> {
+		if (!navigator.clipboard?.writeText) {
+			throw new Error('Clipboard API unavailable');
+		}
+		await navigator.clipboard.writeText(text);
+	}
+
+	for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-command]')) {
+		const command = button.dataset.copyCommand ?? '';
+		const label = button.querySelector<HTMLElement>('[data-copy-label]');
+		const status = button.closest('figure')?.querySelector<HTMLElement>('[data-copy-status]');
+		let timer: ReturnType<typeof setTimeout> | undefined;
+
+		button.addEventListener('click', async () => {
+			clearTimeout(timer);
+			try {
+				await copyText(command);
+				button.dataset.copied = '';
+				if (label) label.textContent = 'Copied';
+				if (status) status.textContent = 'Command copied to clipboard.';
+			} catch {
+				delete button.dataset.copied;
+				if (label) label.textContent = 'Copy';
+				if (status) status.textContent = `Could not copy. Select the command and copy it manually: ${command}`;
+			}
+			timer = setTimeout(() => {
+				delete button.dataset.copied;
+				if (label) label.textContent = 'Copy';
+				if (status) status.textContent = '';
+			}, RESET_AFTER_MS);
+		});
+	}
+</script>

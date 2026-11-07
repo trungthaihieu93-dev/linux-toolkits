@@ -1,0 +1,28 @@
+/* Layer order documented by Starlight for Tailwind v4. */
+@layer base, starlight, theme, components, utilities;
+
+@import '@astrojs/starlight-tailwind';
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+@import './theme.css';
+
+@layer components {
+	/*
+	 * One visible focus ring for every interactive element, in the accent text
+	 * colour of the current mode. Only colour, style and width are set, so
+	 * Starlight's own outline offsets still apply.
+	 */
+	:focus-visible {
+		outline: 2px solid var(--sl-color-text-accent);
+	}
+
+	/*
+	 * Starlight cards cycle through orange, purple, green, red and blue. Start
+	 * the cycle on the run green so orange stays reserved for the call to action
+	 * and caution asides.
+	 */
+	.card:nth-child(4n + 1) {
+		--sl-card-border: var(--sl-color-green);
+		--sl-card-bg: var(--sl-color-green-low);
+	}
+}
