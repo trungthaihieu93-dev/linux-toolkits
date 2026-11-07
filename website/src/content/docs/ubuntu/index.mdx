@@ -1,12 +1,76 @@
 ---
 title: Ubuntu toolchains
-description: linux-toolchain, an interactive installer for 13 developer toolchains on Debian and Ubuntu.
+description: linux-toolchain, an interactive installer for 13 developer toolchains on Debian and Ubuntu, with per-toolchain options, add-ons and a dry run.
 sidebar:
   label: Overview
-  order: 0
 ---
 
-`linux-toolchain` is an interactive installer for 13 developer toolchains on
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+`linux-toolchain` is an interactive installer for developer toolchains on
 Debian and Ubuntu. Run it with `npx linux-toolchain` or `bunx linux-toolchain`,
-choose the toolchains and options you want, and it installs and configures them.
-Add `--dry-run` to print every script it would run without changing anything.
+pick the toolchains you want, choose each one's options and add-ons, review the
+plan, and it installs them one after another.
+
+It is a TypeScript port of the repository's `install-toolchains.sh` script,
+with the same toolchain ids, plus per-toolchain options, add-ons and
+`--dry-run`.
+
+## What it installs
+
+13 toolchains, in this install order:
+
+| Area | Toolchains |
+| --- | --- |
+| JavaScript | [nvm, bun and Node.js](/ubuntu/toolchains/nvm-bun/), [global CLIs installed with bun](/ubuntu/toolchains/bun-tools/) (nx, turbo, expo, ...) |
+| Go, Rust | [Go](/ubuntu/toolchains/go/), [Rust via rustup](/ubuntu/toolchains/rust/) |
+| Python | [python3, pip, venv, pipx and uv](/ubuntu/toolchains/python/), [pyenv](/ubuntu/toolchains/pyenv/) |
+| Java | [OpenJDK](/ubuntu/toolchains/java/) with Maven and Gradle, [jenv](/ubuntu/toolchains/jenv/) |
+| Mobile | [Flutter](/ubuntu/toolchains/flutter/), [Android SDK](/ubuntu/toolchains/android/) |
+| Native | [C/C++ compilers, build systems and debuggers](/ubuntu/toolchains/cpp/) |
+| Containers | [Docker Engine](/ubuntu/toolchains/docker/) with buildx and compose |
+| AI | [Claude Code CLI](/ubuntu/toolchains/claude/) |
+
+Each toolchain has its own options (for example the JDK versions, or the Rust
+release channel) and up to three add-ons. The
+[toolchain reference](/ubuntu/toolchains/) lists them all, with their defaults.
+
+## Supported systems
+
+- **Linux with apt**: Debian, Ubuntu and their derivatives. On other
+  platforms the CLI exits with an error; on a Linux system without apt, the
+  toolchains that need apt fail.
+- **Node.js 22.13 or newer** to run it with `npx`, or **bun** to run it with
+  `bunx`. The published package is a single bundled file with no runtime
+  dependencies.
+- **sudo** for the system steps (apt packages, `/usr/local`, `/opt`,
+  `/etc/profile.d`). You run the CLI as your normal user.
+
+## Safety model
+
+- **Dry run.** `--dry-run` executes nothing and never calls `sudo`. It prints
+  every script the install would run, each labelled `[root]` or `[user]`.
+- **Review step.** Before anything runs, the CLI shows a table of the
+  selected toolchains and their choices and asks `Proceed?`. Only `-y` (or a
+  run without a terminal) skips it.
+- **Per-step sudo.** Only the steps that need root go through `sudo`, which
+  prompts once and is kept fresh for the rest of the run. User-level tools
+  (nvm, bun, rustup, uv, Claude Code, ...) install into your home directory.
+  The CLI never reads or stores your password.
+- **Isolation.** A failing toolchain is reported and the next one still runs.
+  A failing add-on becomes a warning in the summary.
+
+<Aside type="tip">
+	Start with `npx linux-toolchain --all --defaults --dry-run` to see every
+	script a full install would run, without changing anything. It still asks
+	you to accept the Android SDK licenses and to confirm the review.
+</Aside>
+
+## Next steps
+
+<CardGrid>
+	<LinkCard title="Quick start" description="Preview, then run your first install." href="/ubuntu/quick-start/" />
+	<LinkCard title="Usage" description="The interactive flow, every flag, list and exit codes." href="/ubuntu/usage/" />
+	<LinkCard title="How it works" description="sudo, shell config markers, add-on warnings and downloads." href="/ubuntu/how-it-works/" />
+	<LinkCard title="Toolchain reference" description="Options, add-ons and examples for all 13 toolchains." href="/ubuntu/toolchains/" />
+</CardGrid>

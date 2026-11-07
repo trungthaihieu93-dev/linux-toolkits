@@ -1,5 +1,9 @@
 {
   "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    // TypeScript 6 includes no @types packages by default; scripts/ runs on Bun.
+    "types": ["bun"]
+  },
   "include": [".astro/types.d.ts", "**/*"],
   "exclude": ["dist"]
 }

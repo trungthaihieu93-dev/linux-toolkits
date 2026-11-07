@@ -48,7 +48,19 @@ export default defineConfig({
 			sidebar: [
 				{
 					label: 'Ubuntu toolchains',
-					items: [{ autogenerate: { directory: 'ubuntu' } }],
+					items: [
+						'ubuntu',
+						'ubuntu/quick-start',
+						'ubuntu/usage',
+						'ubuntu/how-it-works',
+						'ubuntu/troubleshooting',
+						{
+							label: 'Toolchains',
+							collapsed: true,
+							// Reference index first, then the generated pages in catalog order.
+							items: [{ autogenerate: { directory: 'ubuntu/toolchains' } }],
+						},
+					],
 				},
 			],
 		}),

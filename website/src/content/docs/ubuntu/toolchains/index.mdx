@@ -1,0 +1,24 @@
+---
+title: Toolchain reference
+description: Every toolchain linux-toolchain installs, with links to its options, add-ons and examples.
+sidebar:
+  label: All toolchains
+  order: -1
+---
+
+import ToolchainTable from '../../../../components/ToolchainTable.astro';
+
+The toolchains install in this order. Each page lists the toolchain's
+`--opt` keys, choices and defaults, its add-ons, and the toolchains it
+depends on. A toolchain under **Requires** is added automatically unless it
+is already installed.
+
+These pages are generated from the CLI's own catalog
+(`linux-toolchain list --json`) each time the site is built, so they follow
+the source of the CLI. To see the catalog of the version you run, use:
+
+```sh title="Terminal"
+npx linux-toolchain list
+```
+
+<ToolchainTable />

@@ -5,9 +5,13 @@
   "private": true,
   "packageManager": "bun@1.4.4",
   "scripts": {
+    "gen": "bun scripts/gen-toolchains.ts",
+    "predev": "bun run gen",
     "dev": "bun --bun astro dev",
+    "prebuild": "bun run gen",
     "build": "bun --bun astro build",
     "preview": "bun --bun astro preview",
+    "precheck": "bun run gen",
     "check": "bun --bun astro check"
   },
   "dependencies": {
@@ -23,6 +27,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
+    "@types/bun": "^1.4.4",
     "typescript": "^6.0.3"
   }
 }

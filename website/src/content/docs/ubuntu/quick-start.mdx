@@ -1,0 +1,80 @@
+---
+title: Quick start
+description: Preview what linux-toolchain would do with --dry-run, then run your first interactive install with npx or bunx.
+---
+
+import { Aside, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+<Steps>
+
+1. **Check the requirements.** You need Debian, Ubuntu or a derivative (any
+   system with apt), a user that can run `sudo`, and Node.js 22.13 or newer
+   for `npx` (or bun for `bunx`).
+
+   ```sh title="Terminal"
+   node --version   # v22.13.0 or newer, or:
+   bun --version
+   ```
+
+2. **Preview first.** `--dry-run` runs nothing and never calls `sudo`; it
+   prints each step the install would take, as a `[root]` or `[user]` block
+   followed by its script. This previews every toolchain with its defaults:
+
+   <Tabs syncKey="runner">
+   <TabItem label="npx">
+   ```sh title="Terminal"
+   npx linux-toolchain --all --defaults --dry-run
+   ```
+   </TabItem>
+   <TabItem label="bunx">
+   ```sh title="Terminal"
+   bunx linux-toolchain --all --defaults --dry-run
+   ```
+   </TabItem>
+   </Tabs>
+
+   Because `--all` includes `android`, the dry run still asks you to accept
+   the Android SDK licenses and then shows the review. Answer yes to both, or
+   add `-y` to accept the licenses and skip the review. Without a terminal
+   and without `-y`, `android` is reported as failed (exit code 1) and the
+   other scripts are still printed.
+
+   `--dry-run` also works with the interactive menu
+   (`npx linux-toolchain --dry-run`): you go through every question and get
+   the scripts instead of an install.
+
+3. **Run it interactively.** This installs: nothing changes until you
+   confirm the review at the end.
+
+   <Tabs syncKey="runner">
+   <TabItem label="npx">
+   ```sh title="Terminal (installs)"
+   npx linux-toolchain
+   ```
+   </TabItem>
+   <TabItem label="bunx">
+   ```sh title="Terminal (installs)"
+   bunx linux-toolchain
+   ```
+   </TabItem>
+   </Tabs>
+
+   - Tick the toolchains you want in the checklist.
+   - For each one, answer its options (defaults are pre-selected) and pick
+     its add-ons (the recommended ones are pre-checked).
+   - Check the review table and answer `Proceed?`.
+   - Enter your password when `sudo` asks. It asks once for the whole run.
+
+4. **Open a new shell.** The summary lists the toolchains that are `ok`, the
+   ones that `failed`, and add-on `warnings`. Open a new shell, or log out and
+   back in, so the PATH changes (and the docker group, if you installed Docker)
+   take effect.
+
+</Steps>
+
+<Aside type="tip" title="No prompts">
+	Pass the toolchain ids and `--defaults` to skip the menus, for example
+	`npx linux-toolchain --only go,rust --defaults --dry-run`. Remove
+	`--dry-run` when the output looks right. See [Usage](/ubuntu/usage/) for
+	every flag.
+</Aside>

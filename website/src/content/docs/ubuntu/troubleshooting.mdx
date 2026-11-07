@@ -1,0 +1,97 @@
+---
+title: Troubleshooting
+description: Fixes for common linux-toolchain problems - sudo prompts, PATH not updated, no TTY, non-apt systems, add-on warnings and re-runs.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## A command is not found after the install
+
+PATH changes go into `~/.bashrc`, `~/.zshrc` and `/etc/profile.d/devtools-*.sh`,
+which only new shells read. Open a new terminal, or log out and back in. The
+docker group in particular needs a new login session before `docker` works
+without `sudo`.
+
+## sudo asks for a password, or fails
+
+The CLI runs as your user and calls `sudo` only for root steps. `sudo` asks
+once, before the first root step, and the CLI keeps it fresh for the rest of
+the run. If your user cannot use `sudo`, the first root step
+(`apt-get update`) fails and the run stops with exit code 1. Either get sudo
+rights, or run the whole CLI as root for your user:
+
+```sh title="Terminal"
+sudo npx linux-toolchain --only go --defaults --dry-run
+```
+
+Under `sudo`, user-level tools install for the user who ran `sudo`. Remove
+`--dry-run` to install.
+
+## `no TTY for the menu; use --all or --only id,id`
+
+The toolchain checklist needs an interactive terminal. In scripts, CI or a
+pipe, name the toolchains (exit code 2 otherwise):
+
+```sh title="Terminal"
+npx linux-toolchain --only java,go --defaults --dry-run
+```
+
+Without a terminal the option prompts and the review are skipped too, so the
+defaults and your `--opt` values apply. Android needs `-y` to accept its SDK
+licenses when there is no terminal.
+
+## Not Debian or Ubuntu
+
+- On a platform other than Linux, the CLI stops with
+  `linux-toolchain only runs on Linux (Debian/Ubuntu)` and exit code 1.
+- On a Linux system without apt, it warns
+  `apt not found: components that need it will fail`, and each toolchain
+  that needs apt fails with `<id> needs apt (Debian/Ubuntu): apt-get not found`.
+
+## `unknown toolchain` or a bad `--opt`
+
+These are usage errors (exit code 2). Check the ids, option keys and values
+with:
+
+```sh title="Terminal"
+npx linux-toolchain list
+```
+
+An `--opt` must target a selected toolchain (or one that your choices add,
+such as `jenv` from the `java` add-on `jenv`). The
+[toolchain reference](/ubuntu/toolchains/) lists every key and value.
+
+## An add-on shows up under `warnings`
+
+Add-on failures do not fail the toolchain. Read the warning in the summary,
+fix the cause (often a network problem), then re-run that toolchain with the
+add-on, for example:
+
+```sh title="Terminal"
+npx linux-toolchain --only go --opt go.addons=delve --defaults --dry-run
+```
+
+Remove `--dry-run` to install.
+
+## Android fails with a licenses error
+
+The Android SDK licenses must be accepted. Answer yes at the prompt, or pass
+`-y` (which also skips the review):
+
+```sh title="Terminal"
+npx linux-toolchain --only android --defaults -y --dry-run
+```
+
+## Running it again
+
+Running the CLI again, for example to add a toolchain or an add-on, does not
+duplicate your shell configuration. The `# >>> name >>>` blocks in your rc
+files are added only when missing, and the `/etc/profile.d/devtools-<name>.sh`
+files are rewritten in place. They are the same markers as
+`install-toolchains.sh`, so a machine set up by the bash script is recognised
+too. See [How it works](/ubuntu/how-it-works/).
+
+<Aside type="tip">
+	When in doubt, add `--dry-run`: it prints exactly what would run and changes
+	nothing.
+</Aside>

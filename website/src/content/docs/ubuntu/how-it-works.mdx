@@ -1,0 +1,88 @@
+---
+title: How it works
+description: How linux-toolchain uses sudo, configures your shell with idempotent markers, handles add-on failures and verifies downloads.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Root steps and user steps
+
+Every change the CLI makes is a bash script run as one of two kinds of step:
+
+- **Root steps** install system packages and write to system paths: apt,
+  `/usr/local`, `/opt`, `/etc/profile.d`.
+- **User steps** install tools into the target user's home directory (nvm,
+  bun, rustup, uv, Claude Code, ...) and edit that user's `~/.bashrc` and
+  `~/.zshrc`.
+
+`--dry-run` prints these steps instead of running them, as `[root] <label>`
+and `[user] <label>` blocks, each followed by its script.
+
+### Running as your normal user (recommended)
+
+User steps run as you. Root steps go through `sudo`: it prompts once, before
+the first root step, and the CLI keeps the sudo timestamp fresh in the
+background for the rest of the run, so a long install does not ask again. The
+CLI never reads or stores your password; `sudo` asks for it on the terminal.
+
+### Running as root (`sudo npx linux-toolchain`)
+
+Root steps run directly. User steps run through `runuser` as the target user,
+with `HOME`, `USER` and `LOGNAME` set for that user, so tools still land in
+their home directory and not in `/root`. The target user is the one who ran
+`sudo` (`SUDO_USER`), or the one named with `--user <name>`. Running as root
+without either is a usage error (exit code 2).
+
+## Shell configuration markers
+
+Toolchains that need shell setup write it in one of two places:
+
+- **Your rc files.** A block appended to `~/.bashrc` and `~/.zshrc` (when they
+  exist), between marker lines:
+
+  ```sh title="~/.bashrc"
+  # >>> pyenv >>>
+  ...
+  # <<< pyenv <<<
+  ```
+
+  Before appending, the step checks for the `# >>> name >>>` start marker and
+  skips a file that already has it.
+
+- **System profile scripts.** System-wide PATH entries go to
+  `/etc/profile.d/devtools-<name>.sh` (for example
+  `/etc/profile.d/devtools-gradle.sh`), which is rewritten on every run. The
+  first one also adds a hook, marked `# devtools-profile-hook`, to
+  `/etc/bash.bashrc` and `/etc/zsh/zshrc` so interactive shells load these
+  files.
+
+The markers are byte-identical to the ones the repository's
+`install-toolchains.sh` writes. Re-running the CLI, or running it on a machine
+that the bash script set up, does not duplicate shell configuration.
+
+<Aside>
+	The new PATH entries apply to new shells. Open a new terminal, or log out
+	and back in, after an install. Logging out is also what makes membership
+	of the docker group take effect.
+</Aside>
+
+## Failures and warnings
+
+- **Base step.** Before any toolchain, the CLI runs `apt-get update` and
+  installs a few base packages (`curl`, `ca-certificates`, `git`, `unzip`,
+  `xz-utils`, `zip`). If `apt-get update` fails, the run stops with exit
+  code 1.
+- **Toolchains are isolated.** If one toolchain fails, it is listed as
+  `failed` in the summary and the next one still runs. The exit code is then 1.
+- **Add-ons are optional.** A failing add-on (say `delve` for Go) becomes a
+  warning in the summary; the toolchain itself still counts as `ok`.
+
+## Downloads
+
+Most tools come from apt or from their official installers. Tools that ship
+as GitHub release binaries (for example `golangci-lint` for Go, or
+`lazydocker` for Docker) are downloaded over HTTPS from the project's latest
+release. When the project publishes a checksum file, the download is verified
+with `sha256sum` before it is installed. If the GitHub API cannot be reached to
+find the latest release, a known fallback version is used and a warning is
+shown.
