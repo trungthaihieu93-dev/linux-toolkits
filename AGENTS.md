@@ -18,7 +18,7 @@ plus per-toolchain sub-options, add-ons and `--dry-run`.
 | -------------------------------------------------- | -------------------------------------------------------------------- |
 | `ubuntu/`                                          | Nx workspace (bun). All code, tests and Nx commands live here        |
 | `website/`                                         | Docs site (Astro + Starlight, bun); see "Docs site"                  |
-| `.github/workflows/`                               | `ci.yml`, `publish.yml` (npm) and `docs.yml` (Cloudflare Pages)      |
+| `.github/workflows/`                               | `ci.yml` (checks and npm release) and `docs.yml` (Cloudflare Pages)  |
 | `AGENTS.md`, `CLAUDE.md`                           | Agent guide (this file) and the Claude Code import of it             |
 | `.claude/`, `.agents/`, `.codex/`, `opencode.json` | Agent configuration and skills; see "Skills and agent configuration" |
 
@@ -129,14 +129,22 @@ changes nothing. The publishable package is the build output folder
 
 ## Release
 
-1. Bump `version` in `apps/linux-toolchain/package.json` and commit.
-2. `git tag linux-toolchain@X.Y.Z && git push --tags`.
+Releasing is a version bump: change `version` in
+`apps/linux-toolchain/package.json` in a pull request and merge it. Merging is
+the outward-facing step, so bump only with the maintainer's go-ahead.
 
-The publish workflow (`.github/workflows/publish.yml`, repository root) runs on
-`linux-toolchain@*` tags, checks the tag against the package version, builds,
-and publishes with provenance using the `NPM_TOKEN` secret. CI for pushes and
-pull requests is `.github/workflows/ci.yml`. Publishing is outward-facing: tag
-only with the maintainer's go-ahead.
+On every push to `main` (and on a manual run of CI from `main`), the `release`
+job in `.github/workflows/ci.yml` runs after `checks`, `node-compat` and
+`smoke` pass. If that version is not on npm yet, it publishes the tarball those
+jobs tested (`npm publish --provenance`), waits until npm serves it, and pushes
+the `linux-toolchain@X.Y.Z` tag. A version that is already on npm is skipped,
+so re-running is safe.
+
+Authentication: npm tries trusted publishing (OIDC; repository
+`trungthaihieu93-dev/linux-toolkits`, workflow `ci.yml`) first and falls back
+to the `NPM_TOKEN` secret, which must be a granular token with write access
+and "Bypass 2FA". After a trusted publisher is configured on npmjs.com, delete
+`NPM_TOKEN`.
 
 ## Docs site (`website/`)
 
