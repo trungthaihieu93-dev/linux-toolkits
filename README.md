@@ -27,9 +27,14 @@ toolchain.
 
 ```sh
 cd ubuntu
-npm ci
-npx nx run-many -t lint test build
+bun install
+bun run lint && bun run test && bun run build
+bun run dev -- list                # run the CLI from TypeScript source
 ```
+
+Development uses [Bun](https://bun.sh) 1.4.4 as the package manager and as
+the runtime for Nx, vitest and eslint. The published package is still a single
+Node.js bundle.
 
 Architecture, invariants, how to add a toolchain and the release procedure are
 in [`AGENTS.md`](./AGENTS.md).

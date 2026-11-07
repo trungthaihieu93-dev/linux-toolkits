@@ -4,7 +4,7 @@
   "mcp": {
     "nx-mcp": {
       "type": "local",
-      "command": ["npx", "--prefix", "ubuntu", "nx", "mcp", "ubuntu"],
+      "command": ["bun", "run", "--cwd", "ubuntu", "nx", "mcp", "."],
       "enabled": true
     }
   }

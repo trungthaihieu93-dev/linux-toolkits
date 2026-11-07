@@ -43,14 +43,24 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Bun is the package manager and the runtime for Nx, vitest and eslint.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: ubuntu/package.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('ubuntu/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      # Node packs the bundle and runs it through npx, like a published install.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: ubuntu/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Derive Nx base and head SHAs
         if: env.NX_AFFECTED == 'true'
@@ -60,20 +70,20 @@ jobs:
 
       - name: Lint, test, build, e2e (affected)
         if: env.NX_AFFECTED == 'true'
-        run: npx nx affected -t lint test build e2e
+        run: bun --bun nx affected -t lint test build e2e
 
       - name: Lint, test, build, e2e (all)
         if: env.NX_AFFECTED != 'true'
-        run: npx nx run-many -t lint test build e2e
+        run: bun --bun nx run-many -t lint test build e2e
 
       - name: Check formatting
-        run: npx nx format:check --all
+        run: bun --bun nx format:check --all
 
       - name: ShellCheck install-toolchains.sh
         run: shellcheck --severity=warning install-toolchains.sh
 
       - name: Build package
-        run: npx nx build linux-toolchain
+        run: bun --bun nx build linux-toolchain
 
       - name: Pack package
         id: pack
@@ -88,8 +98,6 @@ jobs:
         env:
           TGZ: ${{ steps.pack.outputs.file }}
         run: npx --yes "./$TGZ" --help
-
-      - uses: oven-sh/setup-bun@v2
 
       - name: Run tarball with bun
         working-directory: ${{ runner.temp }}
