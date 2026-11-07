@@ -43,6 +43,14 @@ export function getentPasswd(key: string): string | undefined {
   }
 }
 
+/** A target-user failure caused by the arguments or invocation (--user, SUDO_USER), as opposed to the system. */
+export class ContextUsageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ContextUsageError';
+  }
+}
+
 function defaultGetuid(): number {
   if (typeof process.getuid !== 'function') {
     throw new Error(
@@ -56,11 +64,14 @@ function lookup(
   getent: (key: string) => string | undefined,
   key: string,
   notFound: string,
+  usage: boolean,
 ): { user: string; home: string } {
   const fields = getent(key)?.split(':');
   const user = fields?.[0];
   const home = fields?.[5];
-  if (!user) throw new Error(notFound);
+  if (!user) {
+    throw usage ? new ContextUsageError(notFound) : new Error(notFound);
+  }
   if (!home) throw new Error(`no home directory for user: ${user}`);
   return { user, home };
 }
@@ -76,23 +87,36 @@ export function resolveContext(opts: ResolveContextOptions = {}): Context {
 
   if (uid !== 0) {
     if (opts.user && opts.dryRun) {
-      const target = lookup(getent, opts.user, `user not found: ${opts.user}`);
-      if (target.user === 'root') throw new Error(NO_TARGET);
+      const target = lookup(
+        getent,
+        opts.user,
+        `user not found: ${opts.user}`,
+        true,
+      );
+      if (target.user === 'root') throw new ContextUsageError(NO_TARGET);
       return { isRoot: false, ...target };
     }
     if (opts.user)
-      throw new Error('--user needs root (run with sudo, or drop --user)');
+      throw new ContextUsageError(
+        '--user needs root (run with sudo, or drop --user)',
+      );
     const { user, home } = lookup(
       getent,
       String(uid),
       `cannot resolve the current user (uid ${uid})`,
+      false,
     );
     return { isRoot: false, user, home };
   }
 
   const target = opts.user || env['SUDO_USER'] || '';
-  if (!target || target === 'root') throw new Error(NO_TARGET);
-  const { user, home } = lookup(getent, target, `user not found: ${target}`);
-  if (user === 'root') throw new Error(NO_TARGET);
+  if (!target || target === 'root') throw new ContextUsageError(NO_TARGET);
+  const { user, home } = lookup(
+    getent,
+    target,
+    `user not found: ${target}`,
+    true,
+  );
+  if (user === 'root') throw new ContextUsageError(NO_TARGET);
   return { isRoot: true, user, home };
 }

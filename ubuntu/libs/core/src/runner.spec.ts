@@ -184,6 +184,10 @@ describe('sanitizeEnv', () => {
     npm_config_prefix: '/usr/local',
     npm_config_global_prefix: '/usr/local',
     NPM_CONFIG_USERCONFIG: '/home/alice/.npmrc',
+    NPM_CONFIG_REGISTRY: 'https://registry.example.test/',
+    NPM_CONFIG_CAFILE: '/etc/ssl/corp.pem',
+    NPM_CONFIG_PREFIX: '/usr/local',
+    NPM_TOKEN: 'secret-token',
     npm_execpath: '/usr/lib/node_modules/npm/bin/npx-cli.js',
     npm_lifecycle_event: 'npx',
     PREFIX: '/usr/local',
@@ -208,6 +212,10 @@ describe('sanitizeEnv', () => {
       BUN_INSTALL: '/home/alice/.bun',
       NVM_DIR: '/home/alice/.nvm',
       NODE_ENV: 'production',
+      NPM_CONFIG_USERCONFIG: '/home/alice/.npmrc',
+      NPM_CONFIG_REGISTRY: 'https://registry.example.test/',
+      NPM_CONFIG_CAFILE: '/etc/ssl/corp.pem',
+      NPM_TOKEN: 'secret-token',
       PATH: '/home/alice/.local/bin:/usr/local/bin:/usr/bin',
     });
   });

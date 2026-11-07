@@ -1,5 +1,11 @@
 import chalk from 'chalk';
-import type { Context, Logger, Runner, TextSink } from '@linux-toolchain/core';
+import {
+  ContextUsageError,
+  type Context,
+  type Logger,
+  type Runner,
+  type TextSink,
+} from '@linux-toolchain/core';
 import {
   createInstallContext,
   resolveSelection,
@@ -49,7 +55,7 @@ export interface InstallDeps {
 export const NO_TTY_MESSAGE = 'no TTY for the menu; use --all or --only id,id';
 export const LICENSES_DECLINED = 'licenses not accepted';
 export const BUN_TOOLS_NEEDS_BUN =
-  'bun-tools needs bun: drop --opt nvm-bun.bun=false or deselect bun-tools';
+  'bun-tools needs bun: keep "Install bun" enabled for nvm-bun (or --opt nvm-bun.bun=true), or deselect bun-tools';
 const ANDROID = 'android';
 
 /** Exit codes: 0 success, 1 install failure, 2 usage error, 130 aborted with Ctrl+C. */
@@ -112,11 +118,13 @@ async function collectChoices(
  * Usage errors only detectable once the final selection and its choices are
  * known. Returns the message, or undefined when the selection is consistent.
  */
-function selectionError(
+async function selectionError(
   ids: readonly string[],
   choices: ReadonlyMap<string, Choices>,
   config: RunConfig,
-): string | undefined {
+  probes: Parameters<typeof resolveSelection>[2],
+  catalog: readonly Toolchain[],
+): Promise<string | undefined> {
   const unselected = [...config.overrides.keys()].filter(
     (id) => !ids.includes(id),
   );
@@ -128,7 +136,9 @@ function selectionError(
     ids.includes('nvm-bun') &&
     choices.get('nvm-bun')?.['bun'] === false
   ) {
-    return BUN_TOOLS_NEEDS_BUN;
+    // Declining the bun install is fine when bun is already on the machine.
+    const nvmBun = catalog.find((t) => t.id === 'nvm-bun');
+    if (!(await nvmBun?.isPresent?.(probes))) return BUN_TOOLS_NEEDS_BUN;
   }
   return undefined;
 }
@@ -172,7 +182,13 @@ async function runSelected(
     probes,
     deps,
   );
-  const invalid = selectionError(ids, choices, config);
+  const invalid = await selectionError(
+    ids,
+    choices,
+    config,
+    probes,
+    deps.catalog,
+  );
   if (invalid) {
     logger.error(`${invalid} (run linux-toolchain --help for usage)`);
     return EXIT.usage;
@@ -249,9 +265,10 @@ export async function runInstall(
   try {
     ctx = deps.resolveContext(config.user, config.dryRun);
   } catch (error) {
-    // An unusable target user (--user without root, no SUDO_USER, unknown user) is a usage error.
+    // Only argument-caused failures (--user without root, no target user,
+    // unknown user) are usage errors; an unresolvable current user is not.
     logger.error(errorMessage(error));
-    return EXIT.usage;
+    return error instanceof ContextUsageError ? EXIT.usage : EXIT.failed;
   }
   if (!deps.hasApt()) {
     logger.warn('apt not found: components that need it will fail');

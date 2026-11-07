@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { userInfo } from 'node:os';
 import { resolve } from 'node:path';
 
 const bundle = resolve(
@@ -44,8 +45,14 @@ describe('linux-toolchain bundle', () => {
   });
 
   it('honours flags after the `install` subcommand', () => {
+    // Fail-safe: `--user` makes a real (non-dry) run exit 2 straight away
+    // ("--user needs root") when this suite runs as a non-root user, as it
+    // does in CI, so a regression that drops --dry-run cannot install anything.
+    // Run as root, this guard does not apply.
     const { status, stdout, stderr } = cli(
       'install',
+      '--user',
+      userInfo().username,
       '--dry-run',
       '--only',
       'go',

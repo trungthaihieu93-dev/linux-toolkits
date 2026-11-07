@@ -138,12 +138,12 @@ the old set, and `--dry-run` to compare.
 
 ## Exit codes
 
-| Code | Meaning                                                                                                                                                                                                                                                                          |
-| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | Success, nothing selected, or the review was declined                                                                                                                                                                                                                            |
-| 1    | A toolchain failed, apt-get update failed, or unsupported platform                                                                                                                                                                                                               |
-| 2    | Usage error: unknown flag or id, `--all` with ids, bad `--opt`, `--opt` for a toolchain that is not selected, `bun-tools` with `--opt nvm-bun.bun=false`, no TTY for the menu, no usable target user (`--user` without root, root without `SUDO_USER` or `--user`, unknown user) |
-| 130  | Cancelled with Ctrl+C at a prompt                                                                                                                                                                                                                                                |
+| Code | Meaning                                                                                                                                                                                                                                                                                               |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Success, nothing selected, or the review was declined                                                                                                                                                                                                                                                 |
+| 1    | A toolchain failed, apt-get update failed, unsupported platform, or the current user cannot be resolved (no passwd entry or home directory)                                                                                                                                                           |
+| 2    | Usage error: unknown flag or id, `--all` with ids, bad `--opt`, `--opt` for a toolchain that is not selected, `bun-tools` with `nvm-bun.bun=false` while bun is not installed, no TTY for the menu, no usable target user (`--user` without root, root without `SUDO_USER` or `--user`, unknown user) |
+| 130  | Cancelled with Ctrl+C at a prompt                                                                                                                                                                                                                                                                     |
 
 ## License
 

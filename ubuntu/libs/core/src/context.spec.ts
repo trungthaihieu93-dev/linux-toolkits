@@ -1,4 +1,9 @@
-import { USER_ENV, getentPasswd, resolveContext } from './context';
+import {
+  ContextUsageError,
+  USER_ENV,
+  getentPasswd,
+  resolveContext,
+} from './context';
 
 const passwd: Record<string, string> = {
   '1000': 'alice:x:1000:1000:Alice:/home/alice:/bin/bash',
@@ -90,6 +95,37 @@ describe('resolveContext', () => {
         getent,
       }),
     ).toThrow('no non-root target user');
+  });
+
+  it('marks argument-caused failures as ContextUsageError, others not', () => {
+    const usage = (opts: Parameters<typeof resolveContext>[0]) => {
+      try {
+        resolveContext(opts);
+      } catch (error) {
+        return error instanceof ContextUsageError;
+      }
+      throw new Error('expected resolveContext to throw');
+    };
+    expect(usage({ getuid: () => 0, env: {}, getent })).toBe(true);
+    expect(usage({ user: 'bob', getuid: () => 1000, env: {}, getent })).toBe(
+      true,
+    );
+    expect(usage({ user: 'ghost', getuid: () => 0, env: {}, getent })).toBe(
+      true,
+    );
+    expect(
+      usage({
+        user: 'ghost',
+        dryRun: true,
+        getuid: () => 1000,
+        env: {},
+        getent,
+      }),
+    ).toBe(true);
+    expect(usage({ getuid: () => 4242, env: {}, getent })).toBe(false);
+    expect(usage({ user: 'nohome', getuid: () => 0, env: {}, getent })).toBe(
+      false,
+    );
   });
 
   it('reports unknown users and missing homes', () => {

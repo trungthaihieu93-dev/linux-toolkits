@@ -1,5 +1,9 @@
 import chalk from 'chalk';
-import { DryRunRunner, RecordingRunner } from '@linux-toolchain/core';
+import {
+  ContextUsageError,
+  DryRunRunner,
+  RecordingRunner,
+} from '@linux-toolchain/core';
 import type { Toolchain } from '@linux-toolchain/toolchains';
 import { spyCatalog, testCtx, testDeps } from '../testing/helpers';
 import { RELOGIN_NOTE } from './execute';
@@ -309,11 +313,24 @@ describe('runInstall: execution', () => {
   it('reports context errors such as --user without root as usage errors', async () => {
     const deps = testDeps({
       resolveContext: () => {
-        throw new Error('--user needs root (run with sudo, or drop --user)');
+        throw new ContextUsageError(
+          '--user needs root (run with sudo, or drop --user)',
+        );
       },
     });
     expect(await runInstall(config(['go'], { user: 'bob' }), deps)).toBe(2);
     expect(deps.err.text).toContain('--user needs root');
+    expect(deps.runner.calls).toEqual([]);
+  });
+
+  it('reports an unresolvable current user as a failure, not a usage error', async () => {
+    const deps = testDeps({
+      resolveContext: () => {
+        throw new Error('cannot resolve the current user (uid 4242)');
+      },
+    });
+    expect(await runInstall(config(['go']), deps)).toBe(1);
+    expect(deps.err.text).toContain('cannot resolve the current user');
     expect(deps.runner.calls).toEqual([]);
   });
 
@@ -385,6 +402,25 @@ describe('runInstall: selection usage errors', () => {
       expect(deps.err.text).toContain(BUN_TOOLS_NEEDS_BUN);
       expect(installed.size).toBe(0);
     }
+  });
+
+  it('allows bun-tools with nvm-bun.bun=false when bun is already present', async () => {
+    const { catalog: spy, installed } = spyCatalog();
+    const deps = testDeps({
+      catalog: spy,
+      exists: (path) => path === `${testCtx.home}/.bun/bin/bun`,
+    });
+    const code = await runInstall(
+      parseRunConfig(
+        ['nvm-bun', 'bun-tools'],
+        { opt: ['nvm-bun.bun=false'], yes: true },
+        spy,
+      ),
+      deps,
+    );
+    expect(code, deps.err.text).toBe(0);
+    expect(installed.get('nvm-bun')?.choices['bun']).toBe(false);
+    expect(installed.has('bun-tools')).toBe(true);
   });
 
   it('allows nvm-bun.bun=false without bun-tools, and bun-tools when bun exists', async () => {

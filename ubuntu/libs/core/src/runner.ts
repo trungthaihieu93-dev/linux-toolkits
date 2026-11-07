@@ -51,7 +51,13 @@ export type SpawnFn = (
 ) => SpawnedProcess;
 
 /** Variables npm/npx set for the processes they launch (besides `npm_*`). */
-const NPM_SET_KEYS = new Set(['PREFIX', 'INIT_CWD', 'NODE']);
+const NPM_SET_KEYS = new Set([
+  'PREFIX',
+  'INIT_CWD',
+  'NODE',
+  // nvm refuses to work while this is set.
+  'NPM_CONFIG_PREFIX',
+]);
 
 /** PATH entries npm, npx and bunx prepend for package binaries. */
 function isLauncherPath(entry: string): boolean {
@@ -66,16 +72,17 @@ function isLauncherPath(entry: string): boolean {
 
 /**
  * The parent environment minus what npm/npx/bunx injected when they launched
- * the CLI: `npm_*` and `NPM_CONFIG_*` variables (a leaked npm_config_prefix
- * makes nvm refuse `nvm use` and points `npm i -g` at the wrong prefix),
- * PREFIX, INIT_CWD, NODE, and package-binary directories on PATH. Pure: never
- * mutates `env`.
+ * the CLI: lowercase `npm_*` variables (a leaked npm_config_prefix makes nvm
+ * refuse `nvm use` and points `npm i -g` at the wrong prefix),
+ * NPM_CONFIG_PREFIX, PREFIX, INIT_CWD, NODE, and package-binary directories on
+ * PATH. Other uppercase NPM_* variables are user configuration (registry, CA
+ * file, userconfig, token) and are kept. Pure: never mutates `env`.
  */
 export function sanitizeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const clean: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(env)) {
     if (value === undefined) continue;
-    if (/^npm_/i.test(key) || NPM_SET_KEYS.has(key)) continue;
+    if (/^npm_/.test(key) || NPM_SET_KEYS.has(key)) continue;
     clean[key] =
       key === 'PATH'
         ? value
