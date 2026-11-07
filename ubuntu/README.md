@@ -24,3 +24,6 @@ node dist/apps/linux-toolchain/main.js --help
 
 The build output in `dist/apps/linux-toolchain/` is the publishable package:
 `main.js` (third-party dependencies inlined), `package.json` and `README.md`.
+
+Architecture, invariants and the release procedure are in the repository
+root [`AGENTS.md`](../AGENTS.md).

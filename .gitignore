@@ -1,0 +1,4 @@
+# Local agent state (workspace build output is ignored in ubuntu/.gitignore)
+.claude/worktrees
+.claude/settings.local.json
+.claude/agent-memory

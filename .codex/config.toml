@@ -1,6 +1,7 @@
 [mcp_servers.nx-mcp]
 command = "npx"
-args = [ "nx", "mcp" ]
+# The Nx workspace is ubuntu/, not the repository root.
+args = [ "--prefix", "ubuntu", "nx", "mcp", "ubuntu" ]
 
 [features]
 multi_agent = true
