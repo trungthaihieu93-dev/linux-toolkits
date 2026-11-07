@@ -28,10 +28,15 @@
             "input": "apps/linux-toolchain",
             "glob": "README.md",
             "output": "."
+          },
+          {
+            "input": "apps/linux-toolchain",
+            "glob": "LICENSE",
+            "output": "."
           }
         ],
         "esbuildOptions": {
-          "target": "node20",
+          "target": "node22",
           "sourcemap": false,
           "outExtension": {
             ".js": ".js"

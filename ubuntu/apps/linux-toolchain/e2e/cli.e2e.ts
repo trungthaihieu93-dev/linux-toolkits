@@ -43,6 +43,20 @@ describe('linux-toolchain bundle', () => {
     expect(stdout).not.toContain('failed:');
   });
 
+  it('honours flags after the `install` subcommand', () => {
+    const { status, stdout, stderr } = cli(
+      'install',
+      '--dry-run',
+      '--only',
+      'go',
+      '--defaults',
+      '-y',
+    );
+    expect(status, stderr).toBe(0);
+    expect(stdout).toMatch(/^\[root\] /m);
+    expect(stdout).toContain('Dry run: printing the scripts');
+  });
+
   it('lists 13 toolchains as JSON', () => {
     const { status, stdout } = cli('list', '--json');
     expect(status).toBe(0);

@@ -11,7 +11,7 @@ bunx linux-toolchain           # same, with bun
 npx linux-toolchain --help
 ```
 
-Requires Linux with apt (Debian, Ubuntu and derivatives) and Node.js 20.17 or
+Requires Linux with apt (Debian, Ubuntu and derivatives) and Node.js 22.13 or
 newer (or bun). The published package is a single bundled file with no runtime
 dependencies.
 
@@ -60,7 +60,9 @@ npx linux-toolchain list --json
 3. **Dependencies**: some choices add toolchains, which are then asked about
    too. `bun-tools` adds `nvm-bun` when bun is missing, `jenv` adds `java`
    when no JDK is in `/usr/lib/jvm`, the `java` add-on `jenv` adds `jenv`, and
-   the `flutter` add-on `android-sdk` adds `android`.
+   the `flutter` add-on `android-sdk` adds `android`. `--opt` may target a
+   toolchain added this way; an `--opt` for any other unselected toolchain is
+   a usage error, and so is `bun-tools` with `--opt nvm-bun.bun=false`.
 4. **Android SDK licenses**: when `android` is selected, the CLI asks
    `Accept the Android SDK licenses (https://developer.android.com/studio/terms)?`.
    Declining marks `android` as failed and the rest still install. `-y`
@@ -83,7 +85,8 @@ fresh for the rest of the run. The CLI never reads or stores your password.
 
 `sudo npx linux-toolchain` also works. Running as root, it installs user-level
 tools for the invoking sudo user (`SUDO_USER`), or for `--user NAME`, through
-`runuser`. `--user` is rejected when not running as root.
+`runuser`. `--user` is rejected when not running as root, except with
+`--dry-run`, which only prints the scripts for that user.
 
 `--dry-run` executes nothing and never calls `sudo`. It prints each step as a
 `[root] <label>` or `[user] <label>` block followed by its script.
@@ -135,12 +138,12 @@ the old set, and `--dry-run` to compare.
 
 ## Exit codes
 
-| Code | Meaning                                                                             |
-| ---- | ----------------------------------------------------------------------------------- |
-| 0    | Success, nothing selected, or the review was declined                               |
-| 1    | A toolchain failed, apt-get update failed, unsupported platform or user             |
-| 2    | Usage error: unknown flag or id, `--all` with ids, bad `--opt`, no TTY for the menu |
-| 130  | Cancelled with Ctrl+C at a prompt                                                   |
+| Code | Meaning                                                                                                                                                                                                                                                                          |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Success, nothing selected, or the review was declined                                                                                                                                                                                                                            |
+| 1    | A toolchain failed, apt-get update failed, or unsupported platform                                                                                                                                                                                                               |
+| 2    | Usage error: unknown flag or id, `--all` with ids, bad `--opt`, `--opt` for a toolchain that is not selected, `bun-tools` with `--opt nvm-bun.bun=false`, no TTY for the menu, no usable target user (`--user` without root, root without `SUDO_USER` or `--user`, unknown user) |
+| 130  | Cancelled with Ctrl+C at a prompt                                                                                                                                                                                                                                                |
 
 ## License
 

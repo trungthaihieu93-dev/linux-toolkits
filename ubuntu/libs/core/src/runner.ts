@@ -47,11 +47,50 @@ export interface SpawnedProcess {
 export type SpawnFn = (
   command: string,
   args: string[],
-  options: { stdio: 'inherit' | 'ignore' },
+  options: { stdio: 'inherit' | 'ignore'; env: NodeJS.ProcessEnv },
 ) => SpawnedProcess;
+
+/** Variables npm/npx set for the processes they launch (besides `npm_*`). */
+const NPM_SET_KEYS = new Set(['PREFIX', 'INIT_CWD', 'NODE']);
+
+/** PATH entries npm, npx and bunx prepend for package binaries. */
+function isLauncherPath(entry: string): boolean {
+  return (
+    entry.includes('/node_modules/.bin') ||
+    entry.includes('/_npx/') ||
+    entry.endsWith('/_npx') ||
+    // npm's run-script node-gyp shim directory
+    entry.includes('/@npmcli/run-script/')
+  );
+}
+
+/**
+ * The parent environment minus what npm/npx/bunx injected when they launched
+ * the CLI: `npm_*` and `NPM_CONFIG_*` variables (a leaked npm_config_prefix
+ * makes nvm refuse `nvm use` and points `npm i -g` at the wrong prefix),
+ * PREFIX, INIT_CWD, NODE, and package-binary directories on PATH. Pure: never
+ * mutates `env`.
+ */
+export function sanitizeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const clean: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) continue;
+    if (/^npm_/i.test(key) || NPM_SET_KEYS.has(key)) continue;
+    clean[key] =
+      key === 'PATH'
+        ? value
+            .split(':')
+            .filter((entry) => !isLauncherPath(entry))
+            .join(':')
+        : value;
+  }
+  return clean;
+}
 
 export interface ProcessRunnerOptions {
   spawn?: SpawnFn;
+  /** Environment the child processes start from, sanitized; defaults to process.env. */
+  env?: NodeJS.ProcessEnv;
   /** Interval for refreshing the sudo timestamp in non-root mode. */
   sudoRefreshMs?: number;
 }
@@ -59,11 +98,13 @@ export interface ProcessRunnerOptions {
 /**
  * Runs scripts for real with inherited stdio. As a normal user, root steps go
  * through sudo (prompting on the TTY once); as root, user steps go through
- * runuser. The CLI never reads or stores a password.
+ * runuser. Every child gets sanitizeEnv(env). The CLI never reads or stores a
+ * password.
  */
 export class ProcessRunner implements Runner {
   private readonly spawn: SpawnFn;
   private readonly sudoRefreshMs: number;
+  private readonly env: NodeJS.ProcessEnv;
   private sudoReady: Promise<void> | undefined;
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -73,6 +114,7 @@ export class ProcessRunner implements Runner {
   ) {
     this.spawn = opts.spawn ?? ((cmd, args, o) => nodeSpawn(cmd, args, o));
     this.sudoRefreshMs = opts.sudoRefreshMs ?? 60_000;
+    this.env = sanitizeEnv(opts.env ?? process.env);
   }
 
   async asRoot(script: string, label: string): Promise<void> {
@@ -132,10 +174,10 @@ export class ProcessRunner implements Runner {
   private refreshSudo(): void {
     try {
       // Best effort: a failed refresh surfaces as a prompt or failure on the next sudo step.
-      this.spawn('sudo', ['-n', '-v'], { stdio: 'ignore' }).once(
-        'error',
-        () => undefined,
-      );
+      this.spawn('sudo', ['-n', '-v'], {
+        stdio: 'ignore',
+        env: this.env,
+      }).once('error', () => undefined);
     } catch {
       // ignore: see above
     }
@@ -145,7 +187,7 @@ export class ProcessRunner implements Runner {
     return new Promise((resolve, reject) => {
       let child: SpawnedProcess;
       try {
-        child = this.spawn(command, args, { stdio: 'inherit' });
+        child = this.spawn(command, args, { stdio: 'inherit', env: this.env });
       } catch (cause) {
         reject(new StepError(label, null, { cause }));
         return;

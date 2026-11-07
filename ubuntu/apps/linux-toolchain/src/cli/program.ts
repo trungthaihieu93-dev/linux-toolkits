@@ -14,6 +14,22 @@ function collect(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
 
+/**
+ * Flags of the `install` subcommand. Commander lets the root command consume
+ * its own options anywhere on the line (before or after `install`), so they
+ * land on the root and/or the subcommand: merge both, concatenating the
+ * repeatable --opt values (root ones first).
+ */
+function installFlags(cmd: Command): InstallFlags {
+  const root = cmd.parent?.opts<InstallFlags>() ?? {};
+  const own = cmd.opts<InstallFlags>();
+  const opt = [...(root.opt ?? []), ...(own.opt ?? [])];
+  return {
+    ...cmd.optsWithGlobals<InstallFlags>(),
+    ...(opt.length > 0 ? { opt } : {}),
+  };
+}
+
 /** Install flags, shared by the root command and its `install` alias. */
 function withInstallOptions(cmd: Command): Command {
   return cmd
@@ -82,7 +98,9 @@ export async function run(
     program
       .command('install')
       .description('install toolchains (the default command)'),
-  ).action(install);
+  ).action((ids: string[], _flags: InstallFlags, cmd: Command) =>
+    install(ids, installFlags(cmd)),
+  );
 
   program
     .command('list')

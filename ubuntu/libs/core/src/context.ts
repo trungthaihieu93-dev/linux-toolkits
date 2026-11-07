@@ -18,8 +18,13 @@ export const USER_ENV =
   'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$HOME/.bun/bin:$PATH"; export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh";';
 
 export interface ResolveContextOptions {
-  /** Value of `--user`; only allowed when running as root. */
+  /** Value of `--user`; only allowed when running as root (or with `dryRun`). */
   user?: string;
+  /**
+   * Nothing will be executed, so a non-root caller may preview `--user NAME`:
+   * the context targets NAME (looked up as usual) with isRoot false.
+   */
+  dryRun?: boolean;
   getuid?: () => number;
   env?: NodeJS.ProcessEnv;
   /** Returns the `getent passwd <key>` line for a name or uid, or undefined. */
@@ -60,6 +65,9 @@ function lookup(
   return { user, home };
 }
 
+const NO_TARGET =
+  'no non-root target user; run via sudo from your account or pass --user NAME';
+
 export function resolveContext(opts: ResolveContextOptions = {}): Context {
   const getuid = opts.getuid ?? defaultGetuid;
   const env = opts.env ?? process.env;
@@ -67,6 +75,11 @@ export function resolveContext(opts: ResolveContextOptions = {}): Context {
   const uid = getuid();
 
   if (uid !== 0) {
+    if (opts.user && opts.dryRun) {
+      const target = lookup(getent, opts.user, `user not found: ${opts.user}`);
+      if (target.user === 'root') throw new Error(NO_TARGET);
+      return { isRoot: false, ...target };
+    }
     if (opts.user)
       throw new Error('--user needs root (run with sudo, or drop --user)');
     const { user, home } = lookup(
@@ -78,16 +91,8 @@ export function resolveContext(opts: ResolveContextOptions = {}): Context {
   }
 
   const target = opts.user || env['SUDO_USER'] || '';
-  if (!target || target === 'root') {
-    throw new Error(
-      'no non-root target user; run via sudo from your account or pass --user NAME',
-    );
-  }
+  if (!target || target === 'root') throw new Error(NO_TARGET);
   const { user, home } = lookup(getent, target, `user not found: ${target}`);
-  if (user === 'root') {
-    throw new Error(
-      'no non-root target user; run via sudo from your account or pass --user NAME',
-    );
-  }
+  if (user === 'root') throw new Error(NO_TARGET);
   return { isRoot: true, user, home };
 }

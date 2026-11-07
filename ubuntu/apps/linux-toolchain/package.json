@@ -8,10 +8,11 @@
   },
   "files": [
     "main.js",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
-    "node": ">=20.17"
+    "node": ">=22.13"
   },
   "os": [
     "linux"

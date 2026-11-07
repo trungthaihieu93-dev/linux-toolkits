@@ -18,7 +18,7 @@ run(process.argv.slice(2), {
   out: process.stdout,
   err: process.stderr,
   logger,
-  resolveContext: (user) => resolveContext({ user }),
+  resolveContext: (user, dryRun) => resolveContext({ user, dryRun }),
   hasApt: () => hasApt(),
   hasCurl: () => hasCommand('curl'),
   createRunner: (ctx, dryRun) =>

@@ -3,7 +3,7 @@ import { DryRunRunner, RecordingRunner } from '@linux-toolchain/core';
 import type { Toolchain } from '@linux-toolchain/toolchains';
 import { spyCatalog, testCtx, testDeps } from '../testing/helpers';
 import { RELOGIN_NOTE } from './execute';
-import { NO_TTY_MESSAGE, runInstall } from './install';
+import { BUN_TOOLS_NEEDS_BUN, NO_TTY_MESSAGE, runInstall } from './install';
 import { parseRunConfig, type InstallFlags } from './options';
 import { ANDROID_LICENSE_QUESTION } from './prompts';
 
@@ -306,14 +306,114 @@ describe('runInstall: execution', () => {
     expect(deps.runner.calls).toEqual([]);
   });
 
-  it('reports context errors such as --user without root', async () => {
+  it('reports context errors such as --user without root as usage errors', async () => {
     const deps = testDeps({
       resolveContext: () => {
         throw new Error('--user needs root (run with sudo, or drop --user)');
       },
     });
-    expect(await runInstall(config(['go'], { user: 'bob' }), deps)).toBe(1);
+    expect(await runInstall(config(['go'], { user: 'bob' }), deps)).toBe(2);
     expect(deps.err.text).toContain('--user needs root');
+    expect(deps.runner.calls).toEqual([]);
+  });
+
+  it('resolves the context leniently for a dry run', async () => {
+    const seen: [string | undefined, boolean][] = [];
+    const deps = testDeps({
+      resolveContext: (user, dryRun) => {
+        seen.push([user, dryRun]);
+        return testCtx;
+      },
+    });
+    await runInstall(
+      config(['go'], { user: 'bob', dryRun: true, yes: true }),
+      deps,
+    );
+    await runInstall(config(['go'], { yes: true }), deps);
+    expect(seen).toEqual([
+      ['bob', true],
+      [undefined, false],
+    ]);
+  });
+});
+
+describe('runInstall: selection usage errors', () => {
+  it('rejects --opt for a toolchain that is not selected', async () => {
+    const { catalog: spy, installed } = spyCatalog();
+    const deps = testDeps({ catalog: spy });
+    const code = await runInstall(
+      parseRunConfig(
+        ['go'],
+        { opt: ['java.jdk=17', 'rust.addons='], yes: true },
+        spy,
+      ),
+      deps,
+    );
+    expect(code).toBe(2);
+    expect(deps.err.text).toContain(
+      '--opt for a toolchain that is not selected: java, rust; select it or drop the --opt',
+    );
+    expect(installed.size).toBe(0);
+    expect(deps.runner.calls).toEqual([]);
+  });
+
+  it('accepts --opt for a toolchain the selection rules add', async () => {
+    const { catalog: spy, installed } = spyCatalog();
+    // bun is missing (listDir/exists probes are empty), so bun-tools adds nvm-bun.
+    const deps = testDeps({ catalog: spy });
+    const code = await runInstall(
+      parseRunConfig(
+        ['bun-tools'],
+        { opt: ['nvm-bun.addons=yarn'], yes: true },
+        spy,
+      ),
+      deps,
+    );
+    expect(code, deps.err.text).toBe(0);
+    expect(installed.get('nvm-bun')?.choices['addons']).toEqual(['yarn']);
+  });
+
+  it('rejects bun-tools with nvm-bun.bun=false', async () => {
+    for (const ids of [['bun-tools'], ['nvm-bun', 'bun-tools']]) {
+      const { catalog: spy, installed } = spyCatalog();
+      const deps = testDeps({ catalog: spy });
+      const code = await runInstall(
+        parseRunConfig(ids, { opt: ['nvm-bun.bun=false'], yes: true }, spy),
+        deps,
+      );
+      expect(code, ids.join(',')).toBe(2);
+      expect(deps.err.text).toContain(BUN_TOOLS_NEEDS_BUN);
+      expect(installed.size).toBe(0);
+    }
+  });
+
+  it('allows nvm-bun.bun=false without bun-tools, and bun-tools when bun exists', async () => {
+    const { catalog: spy, installed } = spyCatalog();
+    const deps = testDeps({ catalog: spy });
+    expect(
+      await runInstall(
+        parseRunConfig(
+          ['nvm-bun'],
+          { opt: ['nvm-bun.bun=false'], yes: true },
+          spy,
+        ),
+        deps,
+      ),
+    ).toBe(0);
+    expect(installed.get('nvm-bun')?.choices['bun']).toBe(false);
+
+    const withBun = spyCatalog();
+    const present = testDeps({
+      catalog: withBun.catalog,
+      exists: (path) => path === `${testCtx.home}/.bun/bin/bun`,
+    });
+    expect(
+      await runInstall(
+        parseRunConfig(['bun-tools'], { yes: true }, withBun.catalog),
+        present,
+      ),
+    ).toBe(0);
+    expect([...withBun.installed.keys()]).toEqual(['bun-tools']);
   });
 });
 

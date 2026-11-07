@@ -8,6 +8,7 @@ import {
   StepError,
   type SpawnFn,
   rootScript,
+  sanitizeEnv,
   userScript,
 } from './runner';
 
@@ -172,6 +173,81 @@ describe('ProcessRunner as root', () => {
         stdio: 'inherit',
       },
     ]);
+  });
+});
+
+describe('sanitizeEnv', () => {
+  const npxEnv: NodeJS.ProcessEnv = {
+    HOME: '/home/alice',
+    BUN_INSTALL: '/home/alice/.bun',
+    NVM_DIR: '/home/alice/.nvm',
+    npm_config_prefix: '/usr/local',
+    npm_config_global_prefix: '/usr/local',
+    NPM_CONFIG_USERCONFIG: '/home/alice/.npmrc',
+    npm_execpath: '/usr/lib/node_modules/npm/bin/npx-cli.js',
+    npm_lifecycle_event: 'npx',
+    PREFIX: '/usr/local',
+    INIT_CWD: '/home/alice/src',
+    NODE: '/usr/bin/node',
+    NODE_ENV: 'production',
+    UNSET: undefined,
+    PATH: [
+      '/home/alice/src/node_modules/.bin',
+      '/home/alice/.npm/_npx/0123abcd/node_modules/.bin',
+      '/tmp/bunx-1000-linux-toolchain@latest/node_modules/.bin',
+      '/usr/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin',
+      '/home/alice/.local/bin',
+      '/usr/local/bin',
+      '/usr/bin',
+    ].join(':'),
+  };
+
+  it('drops npm-injected variables and package-binary PATH entries', () => {
+    expect(sanitizeEnv(npxEnv)).toEqual({
+      HOME: '/home/alice',
+      BUN_INSTALL: '/home/alice/.bun',
+      NVM_DIR: '/home/alice/.nvm',
+      NODE_ENV: 'production',
+      PATH: '/home/alice/.local/bin:/usr/local/bin:/usr/bin',
+    });
+  });
+
+  it('does not mutate its input and keeps a clean env as is', () => {
+    const before = { ...npxEnv };
+    sanitizeEnv(npxEnv);
+    expect(npxEnv).toEqual(before);
+    const clean = { HOME: '/root', PATH: '/usr/sbin:/usr/bin' };
+    expect(sanitizeEnv(clean)).toEqual(clean);
+  });
+
+  it('is passed to every spawned process, as root and as a user', async () => {
+    const envs: NodeJS.ProcessEnv[] = [];
+    const { spawn: base } = fakeSpawn();
+    const spawn: SpawnFn = (cmd, args, o) => {
+      envs.push(o.env);
+      return base(cmd, args, o);
+    };
+    const asRoot = new ProcessRunner(root, { spawn, env: npxEnv });
+    await asRoot.asRoot('true', 'r');
+    await asRoot.asUser('true', 'u');
+    const asUser = new ProcessRunner(user, { spawn, env: npxEnv });
+    await asUser.asRoot('true', 'r');
+    await asUser.asUser('true', 'u');
+    asUser.close();
+    // root: bash, runuser; user: sudo -v, sudo bash, bash
+    expect(envs).toHaveLength(5);
+    for (const env of envs) expect(env).toEqual(sanitizeEnv(npxEnv));
+  });
+
+  it('defaults to the sanitized process environment', async () => {
+    let env: NodeJS.ProcessEnv | undefined;
+    const { spawn: base } = fakeSpawn();
+    const spawn: SpawnFn = (cmd, args, o) => {
+      env = o.env;
+      return base(cmd, args, o);
+    };
+    await new ProcessRunner(root, { spawn }).asRoot('true', 'r');
+    expect(env).toEqual(sanitizeEnv(process.env));
   });
 });
 

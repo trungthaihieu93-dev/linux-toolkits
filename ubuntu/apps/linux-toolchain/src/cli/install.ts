@@ -36,7 +36,8 @@ export interface InstallDeps {
   prompts: PromptFns;
   out: TextSink;
   logger: Logger;
-  resolveContext(user: string | undefined): Context;
+  /** Throws on an invalid target (e.g. --user without root); `dryRun` lets a non-root caller preview --user. */
+  resolveContext(user: string | undefined, dryRun: boolean): Context;
   hasApt(): boolean;
   hasCurl(): boolean;
   createRunner(ctx: Context, dryRun: boolean): ClosableRunner;
@@ -47,6 +48,8 @@ export interface InstallDeps {
 
 export const NO_TTY_MESSAGE = 'no TTY for the menu; use --all or --only id,id';
 export const LICENSES_DECLINED = 'licenses not accepted';
+export const BUN_TOOLS_NEEDS_BUN =
+  'bun-tools needs bun: drop --opt nvm-bun.bun=false or deselect bun-tools';
 const ANDROID = 'android';
 
 /** Exit codes: 0 success, 1 install failure, 2 usage error, 130 aborted with Ctrl+C. */
@@ -105,6 +108,31 @@ async function collectChoices(
   return { ids, choices };
 }
 
+/**
+ * Usage errors only detectable once the final selection and its choices are
+ * known. Returns the message, or undefined when the selection is consistent.
+ */
+function selectionError(
+  ids: readonly string[],
+  choices: ReadonlyMap<string, Choices>,
+  config: RunConfig,
+): string | undefined {
+  const unselected = [...config.overrides.keys()].filter(
+    (id) => !ids.includes(id),
+  );
+  if (unselected.length > 0) {
+    return `--opt for a toolchain that is not selected: ${unselected.join(', ')}; select it or drop the --opt`;
+  }
+  if (
+    ids.includes('bun-tools') &&
+    ids.includes('nvm-bun') &&
+    choices.get('nvm-bun')?.['bun'] === false
+  ) {
+    return BUN_TOOLS_NEEDS_BUN;
+  }
+  return undefined;
+}
+
 async function runSelected(
   config: RunConfig,
   deps: InstallDeps,
@@ -144,6 +172,11 @@ async function runSelected(
     probes,
     deps,
   );
+  const invalid = selectionError(ids, choices, config);
+  if (invalid) {
+    logger.error(`${invalid} (run linux-toolchain --help for usage)`);
+    return EXIT.usage;
+  }
 
   const plan: PlannedToolchain[] = [];
   for (const id of ids) {
@@ -214,10 +247,11 @@ export async function runInstall(
 
   let ctx: Context;
   try {
-    ctx = deps.resolveContext(config.user);
+    ctx = deps.resolveContext(config.user, config.dryRun);
   } catch (error) {
+    // An unusable target user (--user without root, no SUDO_USER, unknown user) is a usage error.
     logger.error(errorMessage(error));
-    return EXIT.failed;
+    return EXIT.usage;
   }
   if (!deps.hasApt()) {
     logger.warn('apt not found: components that need it will fail');

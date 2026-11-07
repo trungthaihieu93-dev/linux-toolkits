@@ -62,6 +62,36 @@ describe('resolveContext', () => {
     ).toThrow('--user needs root');
   });
 
+  it('dry run: a non-root caller may preview --user', () => {
+    expect(
+      resolveContext({
+        user: 'bob',
+        dryRun: true,
+        getuid: () => 1000,
+        env: {},
+        getent,
+      }),
+    ).toEqual({ isRoot: false, user: 'bob', home: '/srv/bob' });
+    expect(() =>
+      resolveContext({
+        user: 'ghost',
+        dryRun: true,
+        getuid: () => 1000,
+        env: {},
+        getent,
+      }),
+    ).toThrow('user not found: ghost');
+    expect(() =>
+      resolveContext({
+        user: 'root',
+        dryRun: true,
+        getuid: () => 1000,
+        env: {},
+        getent,
+      }),
+    ).toThrow('no non-root target user');
+  });
+
   it('reports unknown users and missing homes', () => {
     expect(() =>
       resolveContext({ user: 'ghost', getuid: () => 0, env: {}, getent }),
