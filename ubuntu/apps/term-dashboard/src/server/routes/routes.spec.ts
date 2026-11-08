@@ -1,4 +1,4 @@
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   API_PATHS,
@@ -173,7 +173,11 @@ describe('API routes', () => {
         baseMtimeMs: mtime,
       }),
     );
-    expect((await preview.json()).diff).toContain('+echo two');
+    const body = await preview.json();
+    expect(body.diff).toContain('+echo two');
+    expect(body.backupDir).toBe(
+      join(sbx.env['XDG_STATE_HOME'], 'term-dashboard', 'backups'),
+    );
     const stale = await request(
       API_PATHS.shellRaw('bash', 'save'),
       json('POST', {
@@ -230,5 +234,18 @@ describe('API routes', () => {
   it('serves the oh-my-zsh catalog for zsh', async () => {
     const res = await request(API_PATHS.ohMyZsh('zsh'));
     expect(await res.json()).toEqual({ root: null, themes: [], plugins: [] });
+  });
+
+  it('lists Ptyxis palettes from the user folder and 404s GNOME Terminal', async () => {
+    const dir = join(sbx.env['XDG_DATA_HOME'], 'org.gnome.Ptyxis', 'palettes');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'Mine.palette'), '[Palette]\nName=Mine\n');
+    await writeFile(join(dir, 'notes.txt'), 'not a palette');
+    const res = await request(API_PATHS.terminalPalettes('ptyxis'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ names: ['Mine'] });
+    expect(
+      (await request(API_PATHS.terminalPalettes('gnome-terminal'))).status,
+    ).toBe(404);
   });
 });

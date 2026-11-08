@@ -2,24 +2,34 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { StatePanel } from '../components/state-panel';
 import { OverviewPage } from '../features/overview/overview-page';
 import { NotFoundPage } from '../features/placeholder/not-found-page';
-import { PendingPage } from '../features/placeholder/pending-page';
 
-// xterm.js is loaded only when the Terminal page opens.
+// Each page is its own chunk; xterm.js and Monaco load only with the pages
+// (and dialogs) that use them.
 const TerminalPage = lazy(() =>
   import('../features/terminal/terminal-page').then((m) => ({
     default: m.TerminalPage,
   })),
 );
-
-/** Pages delivered by later steps of this build, shown as a stand-in. */
-const PENDING: Record<string, string> = {
-  '/ghostty': 'Ghostty',
-  '/ptyxis': 'Ptyxis',
-  '/gnome-terminal': 'GNOME Terminal',
-  '/shells/bash': 'bash',
-  '/shells/zsh': 'zsh',
-  '/backups': 'Backups',
-};
+const GhosttyPage = lazy(() =>
+  import('../features/ghostty/ghostty-page').then((m) => ({
+    default: m.GhosttyPage,
+  })),
+);
+const TerminalSettingsPage = lazy(() =>
+  import('../features/gsettings/terminal-settings-page').then((m) => ({
+    default: m.TerminalSettingsPage,
+  })),
+);
+const ShellPage = lazy(() =>
+  import('../features/shells/shell-page').then((m) => ({
+    default: m.ShellPage,
+  })),
+);
+const BackupsPage = lazy(() =>
+  import('../features/backups/backups-page').then((m) => ({
+    default: m.BackupsPage,
+  })),
+);
 
 const loading = (
   <div className="p-3 sm:p-6">
@@ -27,18 +37,33 @@ const loading = (
   </div>
 );
 
+function page(node: ReactNode): ReactNode {
+  return <Suspense fallback={loading}>{node}</Suspense>;
+}
+
 export function renderRoute(path: string): ReactNode {
-  if (path === '/') return <OverviewPage />;
-  if (path === '/terminal') {
-    return (
-      <Suspense fallback={loading}>
-        <TerminalPage />
-      </Suspense>
-    );
+  switch (path) {
+    case '/':
+      return <OverviewPage />;
+    case '/terminal':
+      return page(<TerminalPage />);
+    case '/ghostty':
+      return page(<GhosttyPage />);
+    case '/ptyxis':
+      return page(<TerminalSettingsPage key="ptyxis" kind="ptyxis" />);
+    case '/gnome-terminal':
+      return page(
+        <TerminalSettingsPage key="gnome-terminal" kind="gnome-terminal" />,
+      );
+    case '/shells/bash':
+      return page(<ShellPage key="bash" shell="bash" />);
+    case '/shells/zsh':
+      return page(<ShellPage key="zsh" shell="zsh" />);
+    case '/backups':
+      return page(<BackupsPage />);
+    default:
+      return <NotFoundPage path={path} />;
   }
-  const pending = PENDING[path];
-  if (pending) return <PendingPage key={path} title={pending} />;
-  return <NotFoundPage path={path} />;
 }
 
 /** Pages that fill the main area edge to edge instead of scrolling. */

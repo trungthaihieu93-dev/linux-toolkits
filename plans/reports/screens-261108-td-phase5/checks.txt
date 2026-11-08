@@ -1,0 +1,155 @@
+# Phase 5 sandbox walkthrough output (CDP driver, headless Chrome, built bundle)
+
+## final-main.log
+theme class: dark
+STEP boot: OK
+settings count: 211 settings
+conflict banner: true
+first options: [ 'Dracula', 'Dracula+', 'Dracula+ High Contrast' ]
+Review the changes. Nothing is written until you apply them.
+/tmp/td-p5-config.ZSCkYA/ghostty/config.ghostty
+# Synthetic Ghostty config for term-config tests (not a real user file).
+# Appearance
+theme = Catppuccin Mocha
+font-family = "JetBrains Mono"
+font-family = Noto Color Emoji
+font-size = 13
+background-opacity = 0.95
+  # indented comment
+cursor-style = bar
+palette = 0=#1d1f21
+palette = 1=#cc6666
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_surface
+window-padding-x = 4
+config-file = ?themes/local.conf
+co
+saved note: true
+STEP ghostty: OK
+general settings: 27 settings
+palette options: [ 'dracula' ]
+STEP ptyxis: OK
+outside panel: Defined outside td
+Lines outside the managed blocks that set the same things. td never edits them; change them in Monaco mode.
+L5 · EXPORT
+export ZSH="$HOME/.oh-my-zsh"
+Edit in Monaco at line 5
+L11 · ZSH-THEME
+ZSH_THEME="robbyrussell"
+Edit in Monaco at line 11
+L76 · PLUGINS
+plugins=(git)
+Edit in M
+check: CHECK
+STEP zsh: OK
+backup=/tmp/td-p5-state.33yN8a/term-dashboard/backups/20261108T061939Z/zshrc
+77a78,80
+> # >>> term-dashboard-omz >>>
+> ZSH_THEME='agnoster'
+> # <<< term-dashboard-omz <<<
+107a111,115
+> 
+> # >>> term-dashboard >>>
+> # Managed by term-dashboard (td): edits inside this block are overwritten.
+> alias gs='git status'
+> # <<< term-dashboard <<<
+check passed: true
+apply blocked: {"disabled":true,"text":"syntax error near unexpected token `then'"}
+STEP bash: OK
+backup=/tmp/td-p5-state.33yN8a/term-dashboard/backups/20261108T061942Z/bashrc
+117a118,119
+> 
+> export TD_DEMO=1
+\ No newline at end of file
+[org/gnome/Ptyxis/Profiles/d3cced8753aa4a4a81cdce1401c0a83c]
+label='Work'
+palette='dracula'
+[org/gnome/Ptyxis]
+profile-uuids=['d3cced8753aa4a4a81cdce1401c0a83c']
+backups dir: /tmp/td-p5-state.33yN8a/term-dashboard/backups
+file backups: bashrc@20261108T061942Z, zshrc@20261108T061939Z, ghostty@20261108T061932Z
+gsettings backups: ptyxis@20261108T061933Z
+activity commands: 36
+/^ghostty \+validate-config/ → 3 ghostty +validate-config --config-file=/tmp/td-p5-config.ZSCkYA/ghostty/.config.ghostty.td-351a3fd5231f.tmp
+/^gsettings set .*Profiles.* label/ → 1 gsettings set org.gnome.Ptyxis.Profile:/org/gnome/Ptyxis/Profiles/d3cced8753aa4a4a81cdce1401c0a83c/ label 'Wor
+/^gsettings set .*palette/ → 1 gsettings set org.gnome.Ptyxis.Profile:/org/gnome/Ptyxis/Profiles/d3cced8753aa4a4a81cdce1401c0a83c/ palette 'd
+/^zsh -n/ → 2 zsh -n /tmp/td-p5-home.pTaHlm/..zshrc.td-641f14ffcad3.tmp
+/^bash -n/ → 3 bash -n /tmp/td-p5-home.pTaHlm/..bashrc.td-bf1e969c1646.tmp
+/^gresource list/ → 1 gresource list /usr/bin/ptyxis
+STEP activity: OK
+4c4
+< theme = Catppuccin Mocha
+---
+> theme = Dracula
+600 /tmp/td-p5-state.33yN8a/term-dashboard/backups/20261108T061932Z/ghostty
+700 /tmp/td-p5-state.33yN8a/term-dashboard/backups/20261108T061932Z
+
+## final-keyboard.log
+ghostty tab path {"invisible":[]}
+ghostty dialog {"focusStartsInside":true,"tabsOutside":0}
+ghostty escape closes {"ok":true,"focusAfter":"Review and save"}
+ghostty saved by keyboard {"ok":true}
+ptyxis new-profile dialog {"focusStartsInside":true,"tabsOutside":0}
+ptyxis new-profile escape closes {"ok":true,"focusAfter":"New profile"}
+ptyxis tab path {"invisible":[],"toggled":""}
+ptyxis saved by keyboard {"ok":true}
+zsh tab path {"invisible":[]}
+zsh dialog {"focusStartsInside":true,"tabsOutside":0}
+zsh saved by keyboard {"ok":true}
+bash tab path {"invisible":[]}
+bash dialog {"focusStartsInside":true,"tabsOutside":0}
+bash saved by keyboard {"ok":true}
+backups tab path {"invisible":[]}
+backups dialog {"focusStartsInside":true,"tabsOutside":0}
+backups restored by keyboard {"ok":true}
+STEP keyboard: OK
+
+## final-screens.log
+ghostty 1440 dark: overflow doc=0 main=0
+ptyxis 1440 dark: overflow doc=0 main=0
+ptyxis-profiles 1440 dark: overflow doc=0 main=0
+zsh 1440 dark: overflow doc=0 main=0
+bash 1440 dark: overflow doc=0 main=0
+backups 1440 dark: overflow doc=0 main=0
+dialog 1440 dark: overflow doc=0
+ghostty 375 dark: overflow doc=0 main=0
+ptyxis 375 dark: overflow doc=0 main=0
+ptyxis-profiles 375 dark: overflow doc=0 main=0
+zsh 375 dark: overflow doc=0 main=0
+bash 375 dark: overflow doc=0 main=0
+backups 375 dark: overflow doc=0 main=0
+dialog 375 dark: overflow doc=0
+STEP screens: OK
+ghostty 1440 light: overflow doc=0 main=0
+ptyxis 1440 light: overflow doc=0 main=0
+ptyxis-profiles 1440 light: overflow doc=0 main=0
+zsh 1440 light: overflow doc=0 main=0
+bash 1440 light: overflow doc=0 main=0
+backups 1440 light: overflow doc=0 main=0
+dialog 1440 light: overflow doc=0
+ghostty 375 light: overflow doc=0 main=0
+ptyxis 375 light: overflow doc=0 main=0
+ptyxis-profiles 375 light: overflow doc=0 main=0
+zsh 375 light: overflow doc=0 main=0
+bash 375 light: overflow doc=0 main=0
+backups 375 light: overflow doc=0 main=0
+dialog 375 light: overflow doc=0
+STEP screens: OK
+
+## final-terminal.log
+cols at 1440: 147
+cols at 900: 78 (changed)
+script processes while open: 2
+STEP terminal: OK
+before close:
+1995317 script -qfec exec "$TD_SHELL" -il /dev/null
+after closing the tab:
+none
+
+## final-theme.log
+theme after td restart (new tab, empty sessionStorage): light
+STEP theme-after-restart: OK
+
+## page network requests by origin
+    259 http://127.0.0.1:33851
+     13 http://127.0.0.1:38659

@@ -1,6 +1,7 @@
 import type { Context, Hono } from 'hono';
 import type {
   GSettingsSchemaView,
+  NameList,
   ProfileCreated,
   TerminalProfilesView,
 } from '@linux-toolchain/term-config';
@@ -32,6 +33,7 @@ function target(
  * - `GET profiles` → `TerminalProfilesView`; `POST profiles` (`CreateProfileRequest`) → 201 `ProfileCreated`
  * - `POST profiles/:uuid/duplicate` (`DuplicateProfileRequest`) → 201 `ProfileCreated`
  * - `PUT profiles/:uuid/default` → 204; `DELETE profiles/:uuid` → 204 (never the default)
+ * - `GET palettes` → `NameList` (Ptyxis only; 404 for GNOME Terminal)
  */
 export function gsettingsRoutes(app: Hono, gs: GSettingsService): void {
   for (const [part, path] of [
@@ -58,6 +60,9 @@ export function gsettingsRoutes(app: Hono, gs: GSettingsService): void {
     });
   }
 
+  app.get(`${BASE}/palettes`, async (c) =>
+    c.json<NameList>({ names: await gs.palettes(kindParam(c)) }),
+  );
   app.get(`${BASE}/profiles`, async (c) =>
     c.json<TerminalProfilesView>(await gs.profiles(kindParam(c))),
   );

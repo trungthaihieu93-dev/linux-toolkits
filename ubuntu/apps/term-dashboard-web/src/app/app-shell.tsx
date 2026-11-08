@@ -39,7 +39,9 @@ export function AppShell() {
   }, [path]);
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden">
+    // overflow-clip (not hidden): the frame must never scroll itself, even
+    // when focus or scrollIntoView targets something near its edge.
+    <div className="flex h-dvh w-full overflow-clip">
       <a
         href="#main"
         className="sr-only z-50 rounded-md bg-primary px-3 py-2 font-mono text-sm text-primary-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
@@ -54,7 +56,9 @@ export function AppShell() {
           ref={mainRef}
           tabIndex={-1}
           className={cn(
-            'min-h-0 flex-1 focus:outline-none',
+            // relative: absolutely positioned descendants (sr-only text)
+            // stay inside the scrolling area.
+            'relative min-h-0 flex-1 focus:outline-none',
             fullHeight ? 'flex flex-col overflow-hidden' : 'overflow-y-auto',
           )}
         >

@@ -287,6 +287,11 @@ export interface SavePreview {
   baseMtimeMs: number | null;
   /** The candidate content that a save with the same request writes. */
   candidate: string;
+  /**
+   * Folder that holds td's backups. A save first copies the current file
+   * into a new timestamped subfolder here (nothing when it does not exist).
+   */
+  backupDir?: string;
 }
 
 export interface SaveResult {
@@ -392,7 +397,10 @@ export interface GhosttySaveResult {
   warnings: string[];
 }
 
-/** `GET /api/ghostty/themes`, `GET /api/ghostty/fonts`. */
+/**
+ * `GET /api/ghostty/themes`, `GET /api/ghostty/fonts`,
+ * `GET /api/terminals/ptyxis/palettes` (names for the profile `palette` key).
+ */
 export interface NameList {
   names: string[];
 }
@@ -665,6 +673,9 @@ export const API_PATHS = {
     `/api/terminals/${seg(kind)}/profiles/${seg(uuid)}/duplicate`,
   terminalProfileDefault: (kind: TerminalKind, uuid: string) =>
     `/api/terminals/${seg(kind)}/profiles/${seg(uuid)}/default`,
+  /** Palette names for the profile `palette` key (`NameList`, Ptyxis only). */
+  terminalPalettes: (kind: TerminalKind) =>
+    `/api/terminals/${seg(kind)}/palettes`,
   /** `POST <global|shortcuts|profile path>/reset`, body `GSettingsResetRequest`. */
   terminalReset: (schemaPath: string) => `${schemaPath}/reset`,
   ghosttySchema: '/api/ghostty/schema',

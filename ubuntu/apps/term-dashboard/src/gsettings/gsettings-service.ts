@@ -146,6 +146,9 @@ interface GSettingsBackupFile {
 export const GSETTINGS_BACKUP_NAME = 'gsettings.json';
 const MAX_LABEL = 256;
 const MAX_VALUE = 64 * 1024;
+const PALETTE_EXT = '.palette';
+/** A palette resource inside the ptyxis binary (`gresource list`). */
+const BUILTIN_PALETTE = /^\/org\/gnome\/Ptyxis\/palettes\/([^/]+)\.palette$/;
 
 const schemaArg = (schema: string, path: string | null) =>
   path ? `${schema}:${path}` : schema;
@@ -588,6 +591,49 @@ export class GSettingsService {
       s.defaultProfile.key,
       formatGVariant(uuid, 's'),
     ]);
+  }
+
+  // -------------------------------------------------------------------------
+  // Ptyxis palettes
+
+  /**
+   * Names the Ptyxis profile `palette` key accepts: the user's palettes in
+   * `$XDG_DATA_HOME/org.gnome.Ptyxis/palettes/*.palette` plus the built-in
+   * ones that `gresource list` finds in the ptyxis binary. A listing that
+   * fails contributes no names; the UI then falls back to free text.
+   */
+  async palettes(kind: TerminalKind): Promise<string[]> {
+    if (kind !== 'ptyxis') {
+      throw notFound(`${TERMINALS[kind].label} has no palette list`);
+    }
+    const names = new Set<string>();
+    try {
+      const dir = join(this.dirs.dataHome, 'org.gnome.Ptyxis', 'palettes');
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        if (
+          (entry.isFile() || entry.isSymbolicLink()) &&
+          entry.name.endsWith(PALETTE_EXT) &&
+          entry.name.length > PALETTE_EXT.length
+        ) {
+          names.add(entry.name.slice(0, -PALETTE_EXT.length));
+        }
+      }
+    } catch {
+      // No user palettes folder.
+    }
+    const binary = await findExecutable(TERMINALS.ptyxis.binary, this.env);
+    if (binary) {
+      const result = await this.runner.run(['gresource', 'list', binary]);
+      if (succeeded(result)) {
+        for (const line of result.stdout.split('\n')) {
+          const m = BUILTIN_PALETTE.exec(line.trim());
+          if (m) names.add(m[1]);
+        }
+      }
+    }
+    return [...names].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base' }),
+    );
   }
 
   // -------------------------------------------------------------------------

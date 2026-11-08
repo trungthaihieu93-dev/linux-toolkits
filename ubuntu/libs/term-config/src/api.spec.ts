@@ -15,5 +15,8 @@ describe('API_PATHS', () => {
     expect(
       API_PATHS.backupFileAction('bashrc', '20261108T050000Z-1', 'restore'),
     ).toBe('/api/backups/files/bashrc/20261108T050000Z-1/restore');
+    expect(API_PATHS.terminalPalettes('ptyxis')).toBe(
+      '/api/terminals/ptyxis/palettes',
+    );
   });
 });

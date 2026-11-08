@@ -201,7 +201,7 @@ export function ActivityList({
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="h-full overflow-y-auto"
+        className="relative h-full overflow-y-auto"
         data-testid="activity-scroll"
       >
         {commands.length === 0 ? (
