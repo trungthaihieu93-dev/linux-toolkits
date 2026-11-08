@@ -37,25 +37,89 @@ interface RouterValue {
 
 const RouterContext = createContext<RouterValue | null>(null);
 
+/**
+ * Each history entry this router makes carries its position in
+ * `history.state`, so a held back/forward step can be undone and redone
+ * with `history.go` without adding or cutting entries.
+ */
+const INDEX_KEY = 'tdIndex';
+
+function entryIndex(state: unknown): number | null {
+  if (typeof state !== 'object' || state === null) return null;
+  const index = (state as Record<string, unknown>)[INDEX_KEY];
+  return typeof index === 'number' ? index : null;
+}
+
+function initialIndex(): number {
+  const index = entryIndex(window.history.state);
+  if (index !== null) return index;
+  window.history.replaceState({ [INDEX_KEY]: 0 }, '', window.location.href);
+  return 0;
+}
+
 export function RouterProvider({ children }: { children: ReactNode }) {
   const [path, setPath] = useState(() => window.location.pathname);
   const pathRef = useRef(path);
   pathRef.current = path;
   const blockerRef = useRef<NavigationBlocker | null>(null);
+  const [startIndex] = useState(initialIndex);
+  const indexRef = useRef(startIndex);
+  // Set before a `history.go` the router makes itself, so the popstate it
+  // causes is not treated as the user's.
+  const pendingRef = useRef<'undo' | 'redo' | null>(null);
 
   useEffect(() => {
-    const onPop = () => {
+    const onPop = (event: PopStateEvent) => {
       const target = window.location.pathname;
+      const index = entryIndex(event.state);
+      const pending = pendingRef.current;
+      pendingRef.current = null;
+      if (pending === 'undo') {
+        // Back on the page the user has not left yet.
+        if (index !== null) indexRef.current = index;
+        return;
+      }
       const blocker = blockerRef.current;
-      if (blocker && target !== pathRef.current) {
-        // Put the current page back in the address bar until confirmed.
-        window.history.pushState(null, '', pathRef.current);
-        const held = blocker(() => {
-          window.history.replaceState(null, '', target);
-          setPath(target);
-        });
-        if (held) return;
-        window.history.replaceState(null, '', target);
+      if (pending !== 'redo' && blocker && target !== pathRef.current) {
+        const delta = index !== null ? index - indexRef.current : 0;
+        if (delta !== 0) {
+          // Step back to the current entry until the user confirms, then
+          // take the same step again.
+          const held = blocker(() => {
+            pendingRef.current = 'redo';
+            window.history.go(delta);
+          });
+          if (held) {
+            pendingRef.current = 'undo';
+            window.history.go(-delta);
+            return;
+          }
+        } else {
+          // An entry this router did not make (no index): put the current
+          // page back in the address bar until confirmed.
+          window.history.pushState(
+            { [INDEX_KEY]: indexRef.current + 1 },
+            '',
+            pathRef.current,
+          );
+          const held = blocker(() => {
+            window.history.replaceState(
+              { [INDEX_KEY]: indexRef.current },
+              '',
+              target,
+            );
+            setPath(target);
+          });
+          indexRef.current = indexRef.current + 1;
+          if (held) return;
+          window.history.replaceState(
+            { [INDEX_KEY]: indexRef.current },
+            '',
+            target,
+          );
+        }
+      } else if (index !== null) {
+        indexRef.current = index;
       }
       setPath(target);
     };
@@ -66,8 +130,13 @@ export function RouterProvider({ children }: { children: ReactNode }) {
   const navigate = useCallback<RouterValue['navigate']>((to, opts) => {
     if (to === window.location.pathname) return;
     const go = () => {
-      if (opts?.replace) window.history.replaceState(null, '', to);
-      else window.history.pushState(null, '', to);
+      const current = indexRef.current;
+      if (opts?.replace) {
+        window.history.replaceState({ [INDEX_KEY]: current }, '', to);
+      } else {
+        indexRef.current = current + 1;
+        window.history.pushState({ [INDEX_KEY]: current + 1 }, '', to);
+      }
       setPath(to);
     };
     const blocker = blockerRef.current;
