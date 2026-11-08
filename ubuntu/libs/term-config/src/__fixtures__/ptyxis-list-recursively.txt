@@ -1,0 +1,27 @@
+org.gnome.Ptyxis audible-bell true
+org.gnome.Ptyxis cursor-blink-mode 'system'
+org.gnome.Ptyxis cursor-shape 'block'
+org.gnome.Ptyxis default-columns uint32 80
+org.gnome.Ptyxis default-profile-uuid '91d0e1138a06858802ff88506ae490ea'
+org.gnome.Ptyxis default-rows uint32 24
+org.gnome.Ptyxis disable-padding false
+org.gnome.Ptyxis enable-a11y true
+org.gnome.Ptyxis enable-zoom-scroll-ctrl true
+org.gnome.Ptyxis font-name 'Monospace 10'
+org.gnome.Ptyxis ignore-osc-title false
+org.gnome.Ptyxis inhibit-logout true
+org.gnome.Ptyxis interface-style 'dark'
+org.gnome.Ptyxis new-tab-position 'last'
+org.gnome.Ptyxis profile-uuids ['91d0e1138a06858802ff88506ae490ea']
+org.gnome.Ptyxis prompt-on-close true
+org.gnome.Ptyxis restore-session true
+org.gnome.Ptyxis restore-window-size true
+org.gnome.Ptyxis scrollbar-policy 'system'
+org.gnome.Ptyxis tab-middle-click 'close'
+org.gnome.Ptyxis text-blink-mode 'always'
+org.gnome.Ptyxis toast-on-copy-clipboard true
+org.gnome.Ptyxis use-system-font true
+org.gnome.Ptyxis visual-bell true
+org.gnome.Ptyxis visual-process-leader true
+org.gnome.Ptyxis window-size (uint32 129, uint32 40)
+org.gnome.Ptyxis word-char-exceptions @ms nothing
