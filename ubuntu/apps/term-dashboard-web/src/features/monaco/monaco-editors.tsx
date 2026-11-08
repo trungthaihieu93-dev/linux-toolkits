@@ -33,6 +33,8 @@ function useMonacoTheme() {
   };
 }
 
+const BOM = '\uFEFF';
+
 const loadingText = (
   <span className="font-mono text-sm text-muted-foreground">
     Loading editor…
@@ -78,15 +80,22 @@ export function CodeEditor({
     editor.focus();
   }, [mounted, reveal]);
 
+  // Monaco drops a leading BOM from its text, and @monaco-editor/react
+  // re-applies a `value` that differs from that text as a literal edit. So
+  // the editor gets the text without the BOM, and an edited value gets it
+  // back, so a raw-mode save keeps it (the review diff, also Monaco, would
+  // not show it missing).
+  const bom = value.startsWith(BOM) ? BOM : '';
+
   return (
     <Editor
       height={height}
       language={language}
-      value={value}
+      value={bom ? value.slice(1) : value}
       theme={themeName}
       beforeMount={beforeMount}
       onMount={onMount}
-      onChange={(v) => onChange?.(v ?? '')}
+      onChange={(v) => onChange?.(bom + (v ?? ''))}
       loading={loadingText}
       options={{
         ...BASE_OPTIONS,

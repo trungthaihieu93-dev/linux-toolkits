@@ -131,8 +131,8 @@ reversible.
 - **Only UTF-8 is edited.** A file that is not valid UTF-8 is shown read-only
   with the reason, and td refuses to save it or restore a backup that is not
   UTF-8, so it never rewrites bytes it could not decode. A UTF-8 file keeps a
-  leading byte order mark, so saving it unchanged writes the same bytes. Edit
-  other files in a text editor.
+  leading byte order mark through saves from the forms and the raw editor.
+  Edit other files in a text editor.
 - **gsettings, never dconf.** Terminal settings go through `gsettings` only.
   Before the first change of each run, and again right before every restore,
   td saves a JSON backup of every installed terminal's settings.

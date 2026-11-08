@@ -133,8 +133,9 @@ async function realpathOr(path: string): Promise<string> {
   }
 }
 
-// ignoreBOM keeps a leading byte order mark as U+FEFF in the text, so a
-// save writes it back instead of silently dropping it.
+// ignoreBOM keeps a leading byte order mark as U+FEFF in the text. Form
+// saves edit that text and the raw editor hands the BOM back with its
+// value, so a save writes it back instead of silently dropping it.
 const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 /** The text of `bytes`, or null when they are not valid UTF-8. */
