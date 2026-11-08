@@ -1,3 +1,4 @@
+import { existsSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { HttpError } from '../errors';
@@ -28,6 +29,8 @@ let runner: RecordingCommandRunner;
 let service: GhosttyService;
 let effective: string;
 let dir: string;
+/** Mimic Ghostty 1.2+, which writes a template config.ghostty when none exists. */
+let createsTemplate: boolean;
 
 const legacy = () => join(dir, 'config');
 const modern = () => join(dir, 'config.ghostty');
@@ -38,6 +41,11 @@ function respond(argv: readonly string[]): Partial<CommandResult> {
   if (args === '--version')
     return { stdout: 'Ghostty 1.4.0\n\nVersion\n  - version: 1.4.0\n' };
   if (args === '+show-config --default --docs') return { stdout: DOCS };
+  if (args.startsWith('+show-config') && createsTemplate) {
+    const file = join(dir, 'config.ghostty');
+    if (!existsSync(join(dir, 'config')) && !existsSync(file))
+      writeFileSync(file, '# template\n');
+  }
   if (args === '+show-config') return { stdout: effective };
   if (args === '+list-themes --plain')
     return { stdout: 'Dracula (resources)\nMine (user)\n' };
@@ -55,6 +63,7 @@ beforeEach(async () => {
   dir = join(sbx.env['XDG_CONFIG_HOME'], 'ghostty');
   await mkdir(dir, { recursive: true });
   effective = '';
+  createsTemplate = false;
   runner = new RecordingCommandRunner(respond);
   service = new GhosttyService(
     runner,
@@ -103,6 +112,18 @@ describe('GhosttyService', () => {
       },
     ]);
     expect(view.effective['theme']).toEqual(['Dracula']);
+  });
+
+  it('reads the files after Ghostty has written its first-run template', async () => {
+    createsTemplate = true;
+    const view = await service.config();
+    expect(view.files[0]).toMatchObject({ id: 'ghostty', exists: true });
+    const result = await service.save({
+      edits: [{ op: 'set', key: 'font-size', value: '13' }],
+      baseMtimes: { ghostty: view.files[0].mtimeMs, 'ghostty-legacy': null },
+    });
+    expect(result.results.map((r) => r.fileId)).toEqual(['ghostty']);
+    expect(await readFile(modern(), 'utf8')).toContain('font-size = 13');
   });
 
   it('edits the winning file when both set a key, with a notice', async () => {

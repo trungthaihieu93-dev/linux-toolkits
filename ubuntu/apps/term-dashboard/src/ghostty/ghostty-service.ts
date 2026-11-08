@@ -242,14 +242,18 @@ export class GhosttyService {
   }
 
   async config(): Promise<GhosttyConfigView> {
-    const files = await this.load();
+    // Ghostty writes a template config.ghostty when no config file exists,
+    // even for +show-config. Run the CLI first, so the files (and the mtimes
+    // a later save is checked against) include that template.
     const isRepeatable = await this.repeatable();
     const installed = (await this.version()) !== null;
+    const effective = installed ? await this.effective() : {};
+    const files = await this.load();
     return {
       files: GHOSTTY_FILES.map((id) =>
         this.view(id, files.get(id) as LoadedFile),
       ),
-      effective: installed ? await this.effective() : {},
+      effective,
       conflicts: findConflicts(
         GHOSTTY_FILES.map((id) => ({
           id,
