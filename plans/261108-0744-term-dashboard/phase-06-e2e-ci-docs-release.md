@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "E2E, CI, docs and release wiring"
-status: in-progress
+status: completed
 priority: P2
 effort: "3h"
 dependencies: [5]
