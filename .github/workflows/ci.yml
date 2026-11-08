@@ -198,10 +198,11 @@ jobs:
           gcc --version
           clang --version
 
-  # term-dashboard (td) is packed and tested here, outside the jobs the
-  # release depends on: a td failure never holds back a linux-toolchain
-  # publish. td stays private: it is not in the `package` artifact, and the
-  # release job never publishes it.
+  # term-dashboard (td) lint, test, build and e2e run in `checks` with the
+  # rest of the workspace, whose libs td shares, so they do gate the release.
+  # Only the td packaging, Node-compat and npx smoke jobs below sit outside
+  # the jobs the release depends on. td stays private: it is not in the
+  # `package` artifact, and the release job never publishes it.
   td:
     name: td package
     needs: checks
@@ -306,12 +307,16 @@ jobs:
         run: node td/package/main.js --version
 
       # Starts the server in a throwaway HOME (keyfile gsettings backend, no
-      # display), checks /api/health and stops it with SIGTERM.
-      - name: td health check
+      # display) and checks /api/health. Then, with an authenticated activity
+      # stream held open as a dashboard tab does, SIGTERM must stop td within
+      # 3 s (exit 143) and remove its instance file.
+      - name: td health check and shutdown
         working-directory: ${{ runner.temp }}
         run: |
           sandbox=$(mktemp -d)
-          trap 'rm -rf "$sandbox"' EXIT
+          pid=''
+          stream=''
+          trap 'kill -KILL $pid $stream 2>/dev/null || true; rm -rf "$sandbox"' EXIT
           mkdir -p "$sandbox/home" "$sandbox/run"
           chmod 700 "$sandbox/run"
           env -u DISPLAY -u WAYLAND_DISPLAY \
@@ -342,13 +347,41 @@ jobs:
             }
             console.log("ok: td " + health.version + " answers on 127.0.0.1");
           '
+          code=$(sed -n 's/.*#c=\([A-Za-z0-9_-]*\).*/\1/p' "$sandbox/td.log")
+          token=$(curl -fsS -H 'content-type: application/json' \
+            -d "{\"code\":\"$code\"}" "http://127.0.0.1:$port/api/session" |
+            node -e 'process.stdout.write(JSON.parse(require("node:fs").readFileSync(0, "utf8")).token)')
+          curl -sN -D "$sandbox/stream.headers" -o /dev/null \
+            -H "authorization: Bearer $token" "http://127.0.0.1:$port/api/activity" &
+          stream=$!
+          for _ in $(seq 1 50); do
+            grep -q '^HTTP/1.1 200' "$sandbox/stream.headers" 2>/dev/null && break
+            sleep 0.1
+          done
+          if ! grep -q '^HTTP/1.1 200' "$sandbox/stream.headers" 2>/dev/null; then
+            echo "the activity stream did not open"
+            exit 1
+          fi
           kill -TERM "$pid"
+          for _ in $(seq 1 30); do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.1
+          done
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "td still running 3 s after SIGTERM with a connection open"
+            exit 1
+          fi
           status=0
           wait "$pid" || status=$?
           if [ "$status" -ne 143 ]; then
             echo "expected exit 143 after SIGTERM, got $status"
             exit 1
           fi
+          if [ -e "$sandbox/run/term-dashboard/instance.json" ]; then
+            echo "td left its instance file behind"
+            exit 1
+          fi
+          echo "ok: td stopped on SIGTERM with a connection open"
 
   release:
     name: Publish to npm (new version on main)
