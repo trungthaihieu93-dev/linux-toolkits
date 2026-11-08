@@ -6,6 +6,15 @@
     <meta name="referrer" content="no-referrer" />
     <meta name="color-scheme" content="dark light" />
     <title>td · term dashboard</title>
+    <script>
+      // Apply the cached theme before first paint (default dark). The value
+      // in settings.json is authoritative and is applied once it loads.
+      try {
+        if (sessionStorage.getItem('td.theme') === 'light') {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
