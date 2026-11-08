@@ -71,7 +71,7 @@ td (main.js, Node ESM)                         browser (web/, React 19)
 |---|-------|--------|------------|
 | 1 | [Workspace scaffold, CLI, server shell and link](./phase-01-scaffold-cli-server-link.md) | Completed | none |
 | 2 | [term-config lib: parsers, codecs, API contract](./phase-02-term-config-lib.md) | Completed | 1 |
-| 3 | [Backend services, activity stream and PTY](./phase-03-backend-services-activity-pty.md) | Pending | 2 |
+| 3 | [Backend services, activity stream and PTY](./phase-03-backend-services-activity-pty.md) | Completed | 2 |
 | 4 | [Web shell, design system and terminal](./phase-04-web-shell-design-terminal.md) | Completed (live terminal and settings round-trip checks move to phase 5) | 1, 2 (steps 4-5 need 3) |
 | 5 | [Config pages: Ghostty, Ptyxis/GNOME, shells](./phase-05-config-pages.md) | Pending | 3, 4 |
 | 6 | [E2E, CI, docs and release wiring](./phase-06-e2e-ci-docs-release.md) | Pending | 5 |

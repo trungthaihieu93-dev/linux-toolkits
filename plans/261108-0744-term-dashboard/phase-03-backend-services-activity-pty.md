@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Backend services, activity stream and PTY"
-status: pending
+status: completed
 priority: P1
 effort: "8h"
 dependencies: [2]
