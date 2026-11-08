@@ -9,6 +9,7 @@ import {
   utimes,
   writeFile,
 } from 'node:fs/promises';
+import { chmodSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FileId } from '@linux-toolchain/term-config';
 import { HttpError } from '../errors';
@@ -23,6 +24,7 @@ import { compareBackupTimestamps, FileStore } from './file-store';
 import { previewWrite } from './preview';
 
 const hasBash = await haveBinaries('bash');
+const hasDash = await haveBinaries('sh', 'bash');
 
 let sbx: Sandbox;
 let store: FileStore;
@@ -270,4 +272,177 @@ describe('previewWrite', () => {
       expect(bad.check.output).toContain('syntax error');
     },
   );
+});
+
+describe('FileStore safety', () => {
+  const latin1 = Buffer.concat([
+    Buffer.from('# caf'),
+    Buffer.from([0xe9]),
+    Buffer.from('\necho ok\n'),
+  ]);
+
+  it('shows a file that is not UTF-8 read-only and refuses to write it', async () => {
+    await writeFile(bashrc(), latin1);
+    const snap = await store.read('bashrc');
+    expect(snap.readOnly).toMatch(/not valid UTF-8/);
+    const error = await expectStatus(
+      store.write('bashrc', 'echo new\n', { baseMtimeMs: snap.mtimeMs }),
+      422,
+    );
+    expect(error.message).toMatch(/not valid UTF-8/);
+    expect(await readFile(bashrc())).toEqual(latin1);
+    expect(await store.listBackups('bashrc')).toEqual([]);
+  });
+
+  it('reads valid UTF-8 as writable', async () => {
+    await writeFile(bashrc(), '# café\n');
+    const snap = await store.read('bashrc');
+    expect(snap.readOnly).toBeUndefined();
+    expect(snap.content).toBe('# café\n');
+  });
+
+  it.skipIf(!hasBash)(
+    'marks a backup that is not UTF-8 read-only and refuses to restore it',
+    async () => {
+      await writeFile(bashrc(), latin1);
+      const ts = '20261108T040000Z';
+      await mkdir(join(store.backupsDir, ts), { recursive: true });
+      await writeFile(join(store.backupsDir, ts, 'bashrc'), latin1);
+      await writeFile(bashrc(), 'echo now\n');
+      expect((await store.readBackup('bashrc', ts)).readOnly).toMatch(
+        /not valid UTF-8/,
+      );
+      await expectStatus(store.restore('bashrc', ts), 422);
+      expect(await readFile(bashrc(), 'utf8')).toBe('echo now\n');
+    },
+  );
+
+  it.skipIf(!hasBash)(
+    'serialises concurrent writes to one file so only one passes the mtime check',
+    async () => {
+      await writeFile(bashrc(), 'echo base\n');
+      const snap = await store.read('bashrc');
+      const results = await Promise.allSettled([
+        store.write('bashrc', 'echo a\n', { baseMtimeMs: snap.mtimeMs }),
+        store.write('bashrc', 'echo b\n', { baseMtimeMs: snap.mtimeMs }),
+      ]);
+      const ok = results.filter((r) => r.status === 'fulfilled');
+      const failed = results.filter(
+        (r): r is PromiseRejectedResult => r.status === 'rejected',
+      );
+      expect(ok).toHaveLength(1);
+      expect(failed).toHaveLength(1);
+      expect((failed[0].reason as HttpError).status).toBe(409);
+      expect(await readFile(bashrc(), 'utf8')).toBe('echo a\n');
+      expect(await store.listBackups('bashrc')).toHaveLength(1);
+    },
+  );
+
+  it.skipIf(!hasDash)(
+    'checks .profile with sh -n and bash files with bash -n',
+    async () => {
+      const bashOnly = 'a=(1 2)\necho "${a[0]}"\n';
+      const profile = await store.check('profile', bashOnly);
+      expect(profile.argv[0]).toBe('sh');
+      expect(profile.ok).toBe(false);
+      await expectStatus(
+        store.write('profile', bashOnly, { baseMtimeMs: null }),
+        422,
+      );
+      const rc = await store.check('bashrc', bashOnly);
+      expect(rc.argv[0]).toBe('bash');
+      expect(rc.ok).toBe(true);
+    },
+  );
+
+  it('does not create missing folders for a check or a preview', async () => {
+    const runner = new RecordingCommandRunner(() => ({ code: 0 }));
+    const s = new FileStore(resolveDirs(sbx.env, sbx.home), runner);
+    const dir = join(sbx.env['XDG_CONFIG_HOME'], 'ghostty');
+    const preview = await previewWrite(s, 'ghostty', 'font-size = 12\n');
+    expect(preview.check.ok).toBe(true);
+    expect(runner.calls).toHaveLength(1);
+    await expect(stat(dir)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  describe('writeMany', () => {
+    const ghosttyDir = () => join(sbx.env['XDG_CONFIG_HOME'], 'ghostty');
+    const main = () => join(ghosttyDir(), 'config.ghostty');
+    const legacy = () => join(ghosttyDir(), 'config');
+    const isLegacyCheck = (argv: readonly string[]) =>
+      argv[0] === 'ghostty' && /\/\.config\.td-[0-9a-f]+\.tmp$/.test(argv[2]);
+
+    async function twoFiles(onCheck: (argv: readonly string[]) => void) {
+      await mkdir(ghosttyDir(), { recursive: true });
+      await writeFile(main(), 'font-size = 10\n');
+      await writeFile(legacy(), 'theme = old\n');
+      const runner = new RecordingCommandRunner((argv) => {
+        onCheck(argv);
+        return { code: 0 };
+      });
+      const s = new FileStore(
+        resolveDirs(sbx.env, sbx.home),
+        runner,
+        () => clock,
+      );
+      const a = await s.read('ghostty');
+      const b = await s.read('ghostty-legacy');
+      return { s, a, b };
+    }
+
+    it('writes nothing when a file changes on disk during the checks', async () => {
+      const { s, a, b } = await twoFiles((argv) => {
+        if (isLegacyCheck(argv)) {
+          writeFileSync(legacy(), 'theme = other\n');
+          utimesSync(legacy(), new Date(), new Date(Date.now() + 5000));
+        }
+      });
+      await expectStatus(
+        s.writeMany([
+          {
+            id: 'ghostty',
+            content: 'font-size = 12\n',
+            baseMtimeMs: a.mtimeMs,
+          },
+          {
+            id: 'ghostty-legacy',
+            content: 'theme = new\n',
+            baseMtimeMs: b.mtimeMs,
+          },
+        ]),
+        409,
+      );
+      expect(await readFile(main(), 'utf8')).toBe('font-size = 10\n');
+      expect(await s.listBackups()).toEqual([]);
+    });
+
+    it('puts the first file back when writing the second fails', async () => {
+      const { s, a, b } = await twoFiles((argv) => {
+        // The second file becomes unreadable, so its backup fails.
+        if (isLegacyCheck(argv)) chmodSync(legacy(), 0o000);
+      });
+      const error = await s
+        .writeMany([
+          {
+            id: 'ghostty',
+            content: 'font-size = 12\n',
+            baseMtimeMs: a.mtimeMs,
+          },
+          {
+            id: 'ghostty-legacy',
+            content: 'theme = new\n',
+            baseMtimeMs: b.mtimeMs,
+          },
+        ])
+        .then(
+          () => null,
+          (e: unknown) => e as Error,
+        );
+      await chmod(legacy(), 0o644);
+      expect(error?.message).toMatch(/config\.ghostty was put back/);
+      expect(await readFile(main(), 'utf8')).toBe('font-size = 10\n');
+      expect(await readFile(legacy(), 'utf8')).toBe('theme = old\n');
+      expect(await tmpLeftovers(ghosttyDir())).toEqual([]);
+    });
+  });
 });

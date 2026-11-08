@@ -457,8 +457,9 @@ export function readShellModel(
 
 /**
  * Write `model` into `text`: the main block (removed when the model is
- * empty) and, for zsh, the oh-my-zsh block above the `source` line (removed
- * when `ohMyZsh` has nothing to set). Text outside the blocks is unchanged.
+ * empty) and, for zsh, the oh-my-zsh block above the `source` line. An
+ * absent `ohMyZsh` leaves that block as it is; one that sets nothing removes
+ * it. Text outside the blocks is unchanged.
  */
 export function applyShellModel(
   text: string,
@@ -469,7 +470,7 @@ export function applyShellModel(
   if (problems.length) return { ok: false, error: problems.join('; ') };
   const body = renderBlock(model, shell);
   const main = setMainBlock(text, body === BLOCK_HEADER ? null : body);
-  if (!main.ok || shell !== 'zsh') return main;
+  if (!main.ok || shell !== 'zsh' || model.ohMyZsh === undefined) return main;
   return setOmzBlock(main.value, renderOmzBlock(model.ohMyZsh));
 }
 

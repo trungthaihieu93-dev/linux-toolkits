@@ -23,9 +23,8 @@ import {
   type GhosttySaveResult,
   type GhosttySchema,
   type NameList,
-  type SaveResult,
 } from '@linux-toolchain/term-config';
-import { badRequest, checkFailed, unavailable } from '../errors';
+import { badRequest, unavailable } from '../errors';
 import {
   failureText,
   succeeded,
@@ -222,7 +221,7 @@ export class GhosttyService {
       if (l.kind === 'entry')
         lines.push({ key: l.key, value: l.value, line: i + 1 });
     });
-    return {
+    const view: GhosttyFileView = {
       id,
       path: f.snap.path,
       exists: f.snap.exists,
@@ -230,6 +229,8 @@ export class GhosttyService {
       entries: lines,
       includes: includes(f.doc),
     };
+    if (f.snap.readOnly !== undefined) view.readOnly = f.snap.readOnly;
+    return view;
   }
 
   private async repeatable(): Promise<(key: string) => boolean> {
@@ -340,29 +341,15 @@ export class GhosttyService {
         );
       }
     }
-    const candidates = plan.changed.map((id) => ({
-      id,
-      content: serializeGhostty((plan.files.get(id) as LoadedFile).doc),
-    }));
-    // Check every file before writing any, so a save never stops half-way
-    // on a validation error.
-    for (const { id, content } of candidates) {
-      const check = await this.files.check(id, content);
-      if (!check.ok) {
-        throw checkFailed(
-          `ghostty +validate-config failed for ${FILE_NAMES[id]}`,
-          check.output,
-        );
-      }
-    }
-    const results: SaveResult[] = [];
-    for (const { id, content } of candidates) {
-      results.push(
-        await this.files.write(id, content, {
-          baseMtimeMs: req.baseMtimes[id] ?? null,
-        }),
-      );
-    }
+    // writeMany checks every file (mtime, encoding, validate-config) before
+    // writing any, and puts the first file back if writing the second fails.
+    const results = await this.files.writeMany(
+      plan.changed.map((id) => ({
+        id,
+        content: serializeGhostty((plan.files.get(id) as LoadedFile).doc),
+        baseMtimeMs: req.baseMtimes[id] ?? null,
+      })),
+    );
     const warnings = [...plan.warnings];
     if (results.length > 0 && (await this.version()) !== null) {
       warnings.push(...(await this.overrideWarnings(req.edits)));
