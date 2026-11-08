@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import type { Server, ServerOptions } from 'node:http';
 import {
   createServer as createNetServer,
   type AddressInfo,
@@ -55,9 +55,16 @@ export interface PeerPolicy {
   onRefused?: (uid: number | null) => void;
 }
 
+/** HTTP timeouts; Node's defaults apply to anything left out. */
+export type HttpTimeouts = Pick<
+  ServerOptions,
+  'headersTimeout' | 'requestTimeout' | 'connectionsCheckingInterval'
+>;
+
 export interface ListenOptions {
   websocket?: WebSocketServerLike;
   peer: PeerPolicy;
+  http?: HttpTimeouts;
 }
 
 /**
@@ -68,26 +75,36 @@ export interface ListenOptions {
  * client end (from `/proc/net/tcp`) is ours. Anything else, including a
  * connection whose owner cannot be found, is destroyed before a byte of it
  * is read; this covers HTTP and WebSocket upgrades alike.
+ *
+ * The gate tracks every socket it accepted, so `close()` can destroy them:
+ * the HTTP server never sees them as its own, and `gate.close()` alone would
+ * wait for each one to end (an open activity stream never does).
  */
 export function listen(
   fetch: FetchHandler,
   port: number,
   opts: ListenOptions,
 ): Promise<RunningServer> {
-  const { websocket, peer } = opts;
+  const { websocket, peer, http } = opts;
   // createAdaptorServer without serverOptions/createServer builds a plain
   // node:http server, so the HTTP/2 members of its return type do not apply.
   // It never listens itself: the gate below passes it checked sockets.
   const server = createAdaptorServer({
     fetch,
     hostname: LOOPBACK,
+    ...(http ? { serverOptions: http } : {}),
     ...(websocket ? { websocket: { server: websocket } } : {}),
   }) as Server;
   const peerUid = peer.peerUid ?? readPeerUid;
+  /** Every accepted socket that is still open, checked or not. */
+  const sockets = new Set<Socket>();
+  let closed = false;
 
   const admit = async (socket: Socket): Promise<void> => {
     const ignore = () => undefined;
     socket.on('error', ignore);
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
     const client = { address: socket.remoteAddress, port: socket.remotePort };
     const local = { address: socket.localAddress, port: socket.localPort };
     let uid: number | null = null;
@@ -102,6 +119,10 @@ export function listen(
       }
     }
     if (socket.destroyed) return;
+    if (closed) {
+      socket.destroy();
+      return;
+    }
     if (!isPeerAllowed(uid, peer.uid)) {
       peer.onRefused?.(uid);
       socket.destroy();
@@ -125,14 +146,22 @@ export function listen(
       gate.on('error', (error) => {
         console.error(`td: server error: ${error.message}`);
       });
+      // Node starts an HTTP server's connection tracking (the list behind
+      // closeAllConnections and the header/request timeout checker) on its
+      // 'listening' event, which a server that never listens does not emit.
+      server.emit('listening');
       let closing: Promise<void> | null = null;
       resolve({
         port: (gate.address() as AddressInfo).port,
         server,
         close() {
           closing ??= new Promise<void>((done) => {
+            closed = true;
             gate.close(() => done());
-            server.closeAllConnections();
+            for (const socket of sockets) socket.destroy();
+            // Stops the timeout checker; the server itself never listened,
+            // so the callback only reports ERR_SERVER_NOT_RUNNING.
+            server.close(() => undefined);
           });
           return closing;
         },

@@ -1,7 +1,7 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { request } from 'node:http';
+import { request, type ClientRequest } from 'node:http';
 import { connect } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -150,6 +150,48 @@ function rawRequest(
     );
     req.on('error', fail);
     req.end();
+  });
+}
+
+/**
+ * Open the activity stream with `token` and keep it open, as the dashboard
+ * does; resolves once the response headers have arrived.
+ */
+function holdActivityStream(
+  port: number,
+  token: string,
+): Promise<ClientRequest> {
+  return new Promise((done, fail) => {
+    const req = request(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/api/activity',
+        headers: { authorization: `Bearer ${token}` },
+      },
+      (res) => {
+        if (res.statusCode !== 200) {
+          fail(new Error(`activity stream: HTTP ${res.statusCode}`));
+          return;
+        }
+        res.on('error', () => undefined);
+        res.resume();
+        done(req);
+      },
+    );
+    req.on('error', (error) => fail(error));
+    req.end();
+  });
+}
+
+/** Resolves with `promise`'s value, or 'timeout' after `ms`. */
+function within<T>(promise: Promise<T>, ms: number): Promise<T | 'timeout'> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve('timeout'), ms);
+    void promise.then((value) => {
+      clearTimeout(timer);
+      resolve(value);
+    });
   });
 }
 
@@ -674,41 +716,53 @@ describe.skipIf(!hasPtyTools)('td stopped by a signal', () => {
   });
 
   it.each([
+    ['SIGINT', 130],
     ['SIGTERM', 143],
     ['SIGHUP', 129],
   ] as const)(
-    'leaves no script or shell process behind on %s',
+    'exits promptly with a dashboard connected and leaves no script or shell process behind on %s',
     async (signal, exitCode) => {
       td = await startTd(sbx);
       const pid = td.child.pid as number;
       const token = await exchangeCode(td.origin, td.launchCode);
+      // What an open dashboard tab holds: the activity stream and a terminal.
+      const activity = await holdActivityStream(td.port, token);
       const client = await openPty(td.port, token);
-      const sid = await client.ready();
-      client.send('sleep 300 &\n');
-      await until(() => pgrepSession(sid) === 0, 5000, 'background job');
-      await until(
-        () => descendants(pid).filter((p) => comm(p) === 'sleep').length > 0,
-        5000,
-        'sleep below td',
-      );
+      try {
+        const sid = await client.ready();
+        client.send('sleep 300 &\n');
+        await until(() => pgrepSession(sid) === 0, 5000, 'background job');
+        await until(
+          () => descendants(pid).filter((p) => comm(p) === 'sleep').length > 0,
+          5000,
+          'sleep below td',
+        );
 
-      const tree = descendants(pid);
-      expect(tree.map(comm)).toContain('script');
-      expect(tree).toContain(sid);
+        const tree = descendants(pid);
+        expect(tree.map(comm)).toContain('script');
+        expect(tree).toContain(sid);
 
-      td.child.kill(signal);
-      expect((await td.exited).code).toBe(exitCode);
-      await until(
-        () => tree.every((p) => !running(p)) && pgrepSession(sid) === 1,
-        5000,
-        `td's terminal processes to end after ${signal}`,
-      );
-      expect(tree.filter(running)).toEqual([]);
-      expect(
-        existsSync(
-          join(sbx.env['XDG_RUNTIME_DIR'], 'term-dashboard', 'instance.json'),
-        ),
-      ).toBe(false);
+        td.child.kill(signal);
+        const exited = await within(td.exited, 2000);
+        expect(exited, `td still running 2 s after ${signal}`).not.toBe(
+          'timeout',
+        );
+        expect(exited).toMatchObject({ code: exitCode });
+        await until(
+          () => tree.every((p) => !running(p)) && pgrepSession(sid) === 1,
+          5000,
+          `td's terminal processes to end after ${signal}`,
+        );
+        expect(tree.filter(running)).toEqual([]);
+        expect(
+          existsSync(
+            join(sbx.env['XDG_RUNTIME_DIR'], 'term-dashboard', 'instance.json'),
+          ),
+        ).toBe(false);
+      } finally {
+        activity.destroy();
+        client.ws.close();
+      }
     },
   );
 });
