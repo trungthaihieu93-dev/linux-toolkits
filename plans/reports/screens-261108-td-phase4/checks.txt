@@ -1,0 +1,24 @@
+after launch: url=http://localhost:5173/ tokenStored=true
+html class on first load: "dark"
+dark 375x812 overview: class="dark" scrollWidth=375 innerWidth=375 offenders=[]
+dark 375 terminal: scrollWidth=375
+dark 768x1024 overview: class="dark" scrollWidth=768 innerWidth=768 offenders=[]
+dark 768 terminal: scrollWidth=768
+dark 1024x768 overview: class="dark" scrollWidth=1024 innerWidth=1024 offenders=[]
+dark 1024 terminal: scrollWidth=1024
+dark 1440x900 overview: class="dark" scrollWidth=1440 innerWidth=1440 offenders=[]
+dark 1440 terminal: scrollWidth=1440
+dark 375 nav sheet: scrollWidth=375
+light 375x812 overview: class="" scrollWidth=375 innerWidth=375 offenders=[]
+light 375 terminal: scrollWidth=375
+light 768x1024 overview: class="" scrollWidth=768 innerWidth=768 offenders=[]
+light 768 terminal: scrollWidth=768
+light 1024x768 overview: class="" scrollWidth=1024 innerWidth=1024 offenders=[]
+light 1024 terminal: scrollWidth=1024
+light 1440x900 overview: class="" scrollWidth=1440 innerWidth=1440 offenders=[]
+light 1440 terminal: scrollWidth=1440
+light 375 nav sheet: scrollWidth=375
+tab order: Retry [outline solid 2px] | Resize activity panel [outline solid 2px] | Activity0Collapse activity pan [outline solid 2px] | Skip to contenttdterm dashboar [outline none 3px] | Skip to content [outline solid 2px] | Overview [outline solid 2px] | Ghostty [outline solid 2px] | Ptyxis [outline solid 2px] | bash [outline solid 2px] | zsh [outline solid 2px] | Terminal [outline solid 2px] | Backups [outline solid 2px] | No stream [outline solid 2px] | Switch to light theme [outline solid 2px]
+reduced motion: spinner/live animation-duration = 1e-05s (live dot), transition 1e-05s (nav link)
+after toggle: class="" cache=light
+session-expired text: Session expiredSession expired: restart td or reopen its URL.Running td again opens a new tab with a fresh link.
