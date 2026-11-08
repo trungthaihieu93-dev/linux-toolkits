@@ -32,6 +32,12 @@ const POLL_MS = 20;
 
 export const MAX_COLS = 1000;
 export const MAX_ROWS = 1000;
+/**
+ * At most one `stty` per interval while a window is being resized; the last
+ * size always wins. Each call shows in the activity history, so a drag must
+ * not flood it.
+ */
+export const RESIZE_INTERVAL_MS = 200;
 
 export interface PtySessionOptions {
   shell: string;
@@ -53,8 +59,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * - `detached` puts `script` in its own session; `script` gives the shell a
  *   second session whose id is the shell's pid.
  * - `--pdeathsig HUP` signals `script` if td dies without running cleanups.
- * - Resize runs `stty -F <shell tty> cols C rows R`; the kernel then sends
- *   SIGWINCH to the foreground job.
+ * - Resize runs `stty -F <shell tty> cols C rows R` (at most once per
+ *   `RESIZE_INTERVAL_MS`); the kernel then sends SIGWINCH to the foreground
+ *   job.
  * - `close()` sends SIGHUP to every process of both sessions (background jobs
  *   included) and SIGKILL to whatever is left after `KILL_GRACE_MS`.
  */
@@ -64,6 +71,9 @@ export class PtySession {
   private tty: string | null = null;
   private size: { cols: number; rows: number };
   private resizing: Promise<void> = Promise.resolve();
+  /** A resize waiting for the interval to pass; shared by every caller. */
+  private scheduledResize: Promise<void> | null = null;
+  private lastResizeAt = 0;
   private closing: Promise<void> | null = null;
   private exitedFlag = false;
   private readonly exitPromise: Promise<void>;
@@ -155,12 +165,26 @@ export class PtySession {
     throw new Error('the terminal shell did not start');
   }
 
+  /** Stop reading the terminal's output (backpressure). */
+  pause(): void {
+    this.child.stdout.pause();
+    this.child.stderr.pause();
+  }
+
+  resume(): void {
+    this.child.stdout.resume();
+    this.child.stderr.resume();
+  }
+
   write(data: Uint8Array | string): void {
     if (!this.exitedFlag && this.child.stdin.writable)
       this.child.stdin.write(data);
   }
 
-  /** Apply a new size; calls are serialised and only the latest size is applied. */
+  /**
+   * Apply a new size. Calls are serialised and rate-limited; every caller's
+   * promise settles once the latest size is applied.
+   */
   resize(cols: number, rows: number): Promise<void> {
     if (
       !Number.isInteger(cols) ||
@@ -174,8 +198,19 @@ export class PtySession {
     }
     this.size = { cols, rows };
     if (this.tty === null) return Promise.resolve(); // applied once ready
-    this.resizing = this.resizing.then(() => this.applySize());
-    return this.resizing;
+    this.scheduledResize ??= (async () => {
+      // Always yields once, so `scheduledResize` is set before it is cleared.
+      await sleep(
+        Math.max(0, this.lastResizeAt + RESIZE_INTERVAL_MS - Date.now()),
+      );
+      this.scheduledResize = null;
+      this.lastResizeAt = Date.now();
+      this.resizing = this.resizing
+        .catch(() => undefined)
+        .then(() => this.applySize());
+      return this.resizing;
+    })();
+    return this.scheduledResize;
   }
 
   private applied: { cols: number; rows: number } | null = null;

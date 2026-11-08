@@ -1,5 +1,6 @@
 import {
   createSessionStore,
+  instanceProof,
   LAUNCH_CODE_TTL_MS,
   secretsEqual,
 } from './session';
@@ -34,6 +35,28 @@ describe('createSessionStore', () => {
     expect(store.isInstanceSecret(token)).toBe(false);
     expect(store.isSessionToken(store.instanceSecret)).toBe(false);
     expect(store.redeemLaunchCode(token)).toBeNull();
+  });
+
+  it('issues a distinct token per redemption, each valid until the process ends', () => {
+    const store = createSessionStore();
+    const a = store.redeemLaunchCode(store.mintLaunchCode()) as string;
+    const b = store.redeemLaunchCode(store.mintLaunchCode()) as string;
+    expect(a).not.toBe(b);
+    expect(store.isSessionToken(a)).toBe(true);
+    expect(store.isSessionToken(b)).toBe(true);
+    expect(store.sessionCount).toBe(2);
+    expect(store.isSessionToken(createSessionStore().instanceSecret)).toBe(
+      false,
+    );
+  });
+
+  it('proves the instance secret for a challenge without revealing it', () => {
+    const store = createSessionStore();
+    const proof = store.instanceProof('c'.repeat(32));
+    expect(proof).toBe(instanceProof(store.instanceSecret, 'c'.repeat(32)));
+    expect(proof).not.toContain(store.instanceSecret);
+    expect(proof).not.toBe(store.instanceProof('d'.repeat(32)));
+    expect(proof).not.toBe(createSessionStore().instanceProof('c'.repeat(32)));
   });
 
   it('bounds the number of pending codes', () => {

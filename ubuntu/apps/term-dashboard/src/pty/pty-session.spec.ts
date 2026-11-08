@@ -1,5 +1,8 @@
 import { createActivityBus } from '../exec/activity-bus';
-import { ProcessCommandRunner } from '../exec/command-runner';
+import {
+  ProcessCommandRunner,
+  type CommandRunner,
+} from '../exec/command-runner';
 import {
   createSandbox,
   haveBinaries,
@@ -53,9 +56,9 @@ describe.skipIf(!ready)('PtySession (real pty via script)', () => {
     await sbx.cleanup();
   });
 
-  function start(onExit = vi.fn()) {
+  function start(onExit = vi.fn(), runner?: CommandRunner) {
     let out = '';
-    const runner = new ProcessCommandRunner(createActivityBus(), sbx.env);
+    runner ??= new ProcessCommandRunner(createActivityBus(), sbx.env);
     session = new PtySession({
       shell: '/bin/sh',
       cwd: sbx.home,
@@ -115,5 +118,30 @@ describe.skipIf(!ready)('PtySession (real pty via script)', () => {
     await s.ready;
     await expect(s.resize(0, 10)).rejects.toThrow('invalid terminal size');
     await expect(s.resize(80, 1.5)).rejects.toThrow('invalid terminal size');
+  });
+
+  it('coalesces a drag of resizes into a few stty calls ending at the last size', async () => {
+    const inner = new ProcessCommandRunner(createActivityBus(), sbx.env);
+    const stty: string[][] = [];
+    const runner: CommandRunner = {
+      run: (argv, opts) => {
+        if (argv[0] === 'stty') stty.push([...argv]);
+        return inner.run(argv, opts);
+      },
+    };
+    const { s, output } = start(vi.fn(), runner);
+    await s.ready;
+    const before = stty.length;
+    const pending: Promise<void>[] = [];
+    // A window drag: a new size every 15 ms for 300 ms.
+    for (let cols = 101; cols <= 120; cols++) {
+      pending.push(s.resize(cols, 30));
+      await new Promise((r) => setTimeout(r, 15));
+    }
+    await Promise.all(pending);
+    expect(stty.length - before).toBeLessThanOrEqual(4);
+    expect(stty.at(-1)?.slice(-4)).toEqual(['cols', '120', 'rows', '30']);
+    s.write('stty size\n');
+    await until(() => output().includes('30 120'), 5000, 'stty size');
   });
 });

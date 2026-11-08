@@ -1,13 +1,28 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BODY_LIMITS, createApp } from './app';
-import { createSessionStore, LAUNCH_CODE_TTL_MS } from './session';
+import { BODY_LIMITS, createApp, type AppDeps } from './app';
+import {
+  createSessionStore,
+  instanceProof,
+  LAUNCH_CODE_TTL_MS,
+} from './session';
 
 const PORT = 4777;
 const HOST = `127.0.0.1:${PORT}`;
 
-function setup(webRoot: string | null = null, now = () => 1_000) {
+function setup(
+  webRoot: string | null = null,
+  now = () => 1_000,
+  extra: Partial<AppDeps> = {},
+) {
   const session = createSessionStore({ now });
   const app = createApp({
     session,
@@ -16,6 +31,7 @@ function setup(webRoot: string | null = null, now = () => 1_000) {
     pid: 4242,
     webRoot,
     fileContentRoutes: [/^\/api\/files\//],
+    ...extra,
   });
   const request = (path: string, init: RequestInit = {}) =>
     app.request(path, {
@@ -104,7 +120,43 @@ describe('createApp', () => {
     });
     expect(res.status).toBe(200);
     const { code } = (await res.json()) as { code: string };
-    expect(session.redeemLaunchCode(code)).toBe(token);
+    const second = session.redeemLaunchCode(code);
+    expect(second).not.toBeNull();
+    expect(second).not.toBe(token);
+  });
+
+  it('proves the instance secret on a health challenge', async () => {
+    const { request, session } = setup();
+    const challenge = 'Q'.repeat(43);
+    const res = await request(`/api/health?challenge=${challenge}`);
+    const body = (await res.json()) as { proof?: string };
+    expect(body.proof).toBe(instanceProof(session.instanceSecret, challenge));
+    const bad = await request('/api/health?challenge=short');
+    expect('proof' in ((await bad.json()) as object)).toBe(false);
+  });
+
+  it('forbids framing on every response', async () => {
+    const { request } = setup();
+    for (const path of ['/api/health', '/api/settings', '/nope']) {
+      const res = await request(path);
+      expect(res.headers.get('x-frame-options')).toBe('DENY');
+      expect(res.headers.get('content-security-policy')).toBe(
+        "frame-ancestors 'none'",
+      );
+    }
+  });
+
+  it("reports each redemption on td's terminal without secrets", async () => {
+    const notice = vi.fn();
+    const { request, session } = setup(null, () => 1_000, { notice });
+    const code = session.mintLaunchCode();
+    const redeemed = await request('/api/session', postJson({ code }));
+    const { token } = (await redeemed.json()) as { token: string };
+    expect(notice).toHaveBeenCalledOnce();
+    const line = notice.mock.calls[0][0] as string;
+    expect(line).toMatch(/launch link used/);
+    expect(line).not.toContain(code);
+    expect(line).not.toContain(token);
   });
 
   it('returns 413 for an oversized body', async () => {

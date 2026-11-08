@@ -106,6 +106,11 @@ describe('startServer', () => {
       body: JSON.stringify({ code }),
     });
     expect(session.status).toBe(200);
+    const { token } = (await session.json()) as { token: string };
+    const notices = first.err.join('');
+    expect(notices).toMatch(/launch link used/);
+    expect(notices).not.toContain(code);
+    expect(notices).not.toContain(token);
 
     // A second td reuses the first one and exits 0.
     const second = harness(dir);

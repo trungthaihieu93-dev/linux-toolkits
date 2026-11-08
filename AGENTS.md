@@ -119,17 +119,24 @@ td (paths under `apps/term-dashboard/src/`):
   streams it as SSE. `RecordingCommandRunner` answers from a responder in
   tests.
 - **FileStore** (`files/file-store.ts`): resolves allowlisted file ids
-  against `HOME`/`XDG_CONFIG_HOME` and writes through one pipeline: mtime check
-  (409), temp file with the target's mode, syntax check through CommandRunner
-  (422 on failure), timestamped 0600 backup, atomic rename.
+  against `HOME`/`XDG_CONFIG_HOME` and writes through one pipeline under a
+  per-file in-process lock (`system/keyed-mutex.ts`): mtime check (409),
+  refusal of non-UTF-8 files (422), temp file with the target's mode, syntax
+  check through CommandRunner (422 on failure; `sh -n` for `.profile`),
+  timestamped 0600 backup, atomic rename. `writeMany` does this for several
+  files as one save and puts earlier files back if a later one fails.
 - **Services** (`server/services.ts`): Ghostty (`ghostty/`), gsettings
   (`gsettings/`, never the `dconf` CLI), shells (`shell/`, managed blocks from
   `libs/term-config`), settings and backups, wired into Hono routes in
   `server/routes/`. `server/guard.ts` enforces the Host/Origin allowlist and
-  the session token; `server/session.ts` swaps launch codes for it.
+  the session tokens; `server/session.ts` swaps each launch code for a new
+  token; `server/listen.ts` admits a connection only when `/proc/net/tcp`
+  shows its client end is owned by td's uid (`server/peer-uid.ts`). gsettings
+  changes are serialised per terminal kind.
 - **PTY** (`pty/`): `setpriv --pdeathsig HUP -- script -qfec ... /dev/null`
-  over `/ws/pty`, resized with `stty -F`; closing the tab or any td exit
-  signal kills the shell's whole session.
+  over `/ws/pty`, resized with `stty -F` (rate-limited); output reading pauses
+  while the WebSocket is backed up (`pty/output-flow.ts`); closing the tab or
+  any td exit signal kills the shell's whole session.
 - **Web** (`apps/term-dashboard-web/src/`): pages under `features/`, API
   types from `@linux-toolchain/term-config`.
 
@@ -168,13 +175,19 @@ td:
 
 - Commands td runs go through `CommandRunner` and config files are written
   only through `FileStore`. The only other side effects are td's own state
-  (`settings.json`, the instance file), the PTY spawn and opening the browser.
+  (`settings.json`, the instance file), the PTY spawn and opening the
+  browser.
 - Commands are argv arrays, never shell strings; values reach the PTY shell
   through the environment, not interpolation.
 - Clients name files by id, never by path; every route identifier is
   validated.
-- The server binds 127.0.0.1 only, needs the session token (never in a URL or
-  argv), checks Host and Origin, and refuses to run as root.
+- The server binds 127.0.0.1 only, needs a session token (never in a URL or
+  argv), checks Host and Origin, and refuses to run as root. Connections from
+  other local users are refused by peer uid (`/proc/net/tcp`), before any
+  request is read, and the check fails closed. The launch code is single-use,
+  valid 60 s, and only useful to the same user.
+- 409 means only "file changed on disk"; other refusals of a valid request
+  use 422 (see the status list in `libs/term-config/src/api.ts`).
 - Managed-block markers (`# >>> term-dashboard >>>`,
   `# >>> term-dashboard-omz >>>` and their `<<<` ends) never change.
 - Tests run td against a temporary `HOME` and XDG folders with

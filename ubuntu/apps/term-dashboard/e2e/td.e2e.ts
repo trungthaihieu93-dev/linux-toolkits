@@ -16,6 +16,7 @@ import type {
   ShellName,
   TerminalInventory,
 } from '@linux-toolchain/term-config';
+import { readPeerUid } from '../src/server/peer-uid';
 import {
   exchangeCode,
   openPty,
@@ -369,7 +370,10 @@ describe('td bundle', () => {
       });
     const first = await redeem();
     expect(first.status).toBe(200);
-    expect(((await first.json()) as { token: string }).token).toBe(token);
+    // Each redemption gets its own token.
+    const second = ((await first.json()) as { token: string }).token;
+    expect(second).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(second).not.toBe(token);
     expect((await redeem()).status).toBe(401);
   });
 
@@ -613,15 +617,45 @@ describe('td bundle', () => {
       'm',
     ).exec(second.stdout);
     expect(m, second.stdout).not.toBeNull();
-    expect(await exchangeCode(td?.origin as string, m?.[1] as string)).toBe(
-      token,
-    );
+    // Every redemption gets its own token; the first one stays valid.
+    const another = await exchangeCode(td?.origin as string, m?.[1] as string);
+    expect(another).not.toBe(token);
+    const settings = await fetch(`${td?.origin}/api/settings`, {
+      headers: { authorization: `Bearer ${another}` },
+    });
+    expect(settings.status).toBe(200);
 
     const instance = JSON.parse(await readFile(instanceFile, 'utf8')) as {
       pid: number;
       port: number;
     };
     expect(instance).toMatchObject({ pid: td?.child.pid, port: td?.port });
+  });
+
+  it('serves a connection whose /proc/net/tcp owner is the current user', async () => {
+    const port = td?.port as number;
+    const socket = connect(port, '127.0.0.1');
+    await new Promise<void>((r) => socket.once('connect', () => r()));
+    // The lookup td runs on accept, done here for the same socket.
+    expect(
+      await readPeerUid(
+        {
+          address: socket.localAddress as string,
+          port: socket.localPort as number,
+        },
+        { address: '127.0.0.1', port },
+      ),
+    ).toBe(process.getuid?.());
+    const response = await new Promise<string>((resolve) => {
+      let data = '';
+      socket.on('data', (d: Buffer) => (data += d.toString()));
+      socket.on('close', () => resolve(data));
+      socket.write(
+        `GET /api/health HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`,
+      );
+    });
+    expect(response).toMatch(/^HTTP\/1\.1 200/);
+    expect(response).toContain('"app":"term-dashboard"');
   });
 });
 

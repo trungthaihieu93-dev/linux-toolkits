@@ -109,7 +109,9 @@ describe.skipIf(!ready)(
         '0.25',
       );
 
-      expect(await service.restore(backup?.ts as string)).toEqual(['ptyxis']);
+      expect((await service.restore(backup?.ts as string)).restored).toEqual([
+        'ptyxis',
+      ]);
       expect({
         global: await listing('org.gnome.Ptyxis'),
         main: await listing(profileArg(main)),

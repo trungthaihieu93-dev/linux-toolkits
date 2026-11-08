@@ -18,6 +18,7 @@ import {
   writeInstanceFile,
   type InstanceInfo,
 } from './instance';
+import { instanceProof } from './session';
 
 const uid = process.getuid?.() ?? 0;
 const info: InstanceInfo = {
@@ -94,9 +95,18 @@ describe('instance file', () => {
   });
 
   describe('findRunningInstance', () => {
-    const healthy = vi.fn(async () =>
-      jsonResponse({ app: 'term-dashboard', version: '1', pid: info.pid }),
-    );
+    /** Answers like a td that knows `secret`. */
+    const answering = (secret: string, pid = info.pid) =>
+      vi.fn(async (url: string) => {
+        const challenge = new URL(url).searchParams.get('challenge') ?? '';
+        return jsonResponse({
+          app: 'term-dashboard',
+          version: '1',
+          pid,
+          proof: instanceProof(secret, challenge),
+        });
+      });
+    const healthy = answering(info.instanceSecret);
 
     it('returns the instance when the pid is alive and health matches', async () => {
       await writeInstanceFile(file, info);
@@ -107,7 +117,9 @@ describe('instance file', () => {
       });
       expect(found).toEqual(info);
       expect(healthy).toHaveBeenCalledWith(
-        'http://127.0.0.1:4777/api/health',
+        expect.stringMatching(
+          /^http:\/\/127\.0\.0\.1:4777\/api\/health\?challenge=[A-Za-z0-9_-]{43}$/,
+        ),
         expect.anything(),
       );
     });
@@ -127,6 +139,10 @@ describe('instance file', () => {
     it('never trusts another process answering on the port', async () => {
       await writeInstanceFile(file, info);
       for (const fetchFn of [
+        // A reused pid: right pid and app name, but no knowledge of the secret.
+        async () => jsonResponse({ app: 'term-dashboard', pid: info.pid }),
+        answering('b'.repeat(43)),
+        answering(info.instanceSecret, 999),
         async () => jsonResponse({ app: 'term-dashboard', pid: 999 }),
         async () => jsonResponse({ app: 'other', pid: info.pid }),
         async () => jsonResponse({}, 500),
@@ -183,5 +199,10 @@ describe('instance file', () => {
   it('detects live and dead pids', () => {
     expect(isProcessAlive(process.pid)).toBe(true);
     expect(isProcessAlive(2 ** 22 + 1)).toBe(false);
+  });
+
+  it.skipIf(uid === 0)('treats a pid owned by another user as not ours', () => {
+    // pid 1 (init) belongs to root, so signalling it fails with EPERM.
+    expect(isProcessAlive(1)).toBe(false);
   });
 });

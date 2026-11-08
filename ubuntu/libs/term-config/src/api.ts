@@ -3,11 +3,18 @@
  * (apps/term-dashboard) and its web UI (apps/term-dashboard-web).
  *
  * Conventions:
- * - Every body is JSON; errors are `ApiError` with a 4xx/5xx status
- *   (400 invalid input, 401 no session, 404 unknown id, 409 file changed on
- *   disk since `baseMtimeMs`, 413 body too large, 422 the syntax check of a
- *   save failed (`detail` holds its output), 503 the program or schema the
- *   route needs is not installed).
+ * - Every body is JSON; errors are `ApiError` with a 4xx/5xx status:
+ *   - 400 invalid input;
+ *   - 401 no session;
+ *   - 404 unknown id;
+ *   - 409 only for "the file changed on disk since `baseMtimeMs`" (reload
+ *     and retry); no other condition uses 409;
+ *   - 413 body too large;
+ *   - 422 the request is valid but cannot be applied: the syntax check of a
+ *     save failed (`detail` holds its output), the default profile cannot be
+ *     deleted, the file or backup is not UTF-8 (see `readOnly`), or a
+ *     gsettings restore partly failed (`detail` lists the keys);
+ *   - 503 the program or schema the route needs is not installed.
  * - Every `/api/*` call except `GET /api/health` and `POST /api/session`
  *   carries `Authorization: Bearer <SessionResponse.token>`.
  * - GVariant values travel as GVariant text (`'block'`, `uint32 80`,
@@ -87,11 +94,17 @@ export interface Availability {
 // ---------------------------------------------------------------------------
 // Health and session (launch code exchange)
 
-/** `GET /api/health` (public). */
+/**
+ * `GET /api/health` (public). With `?challenge=<16-128 base64url chars>` the
+ * response carries `proof` = base64url HMAC-SHA256 of the challenge keyed by
+ * the instance secret, so a second `td` can tell the real instance from a
+ * process that took over its port, without sending the secret.
+ */
 export interface Health {
   app: 'term-dashboard';
   version: string;
   pid: number;
+  proof?: string;
 }
 
 /** `POST /api/session` (public): redeem the single-use `#c=` launch code. */
@@ -258,7 +271,11 @@ export interface CreateProfileRequest {
 export interface DuplicateProfileRequest {
   label?: string;
 }
-/** `PUT /api/terminals/:kind/profiles/:uuid/default` has no body. */
+/**
+ * `PUT /api/terminals/:kind/profiles/:uuid/default` has no body.
+ * `DELETE /api/terminals/:kind/profiles/:uuid` → 204; deleting the default
+ * profile is refused with 422 (never 409).
+ */
 export interface ProfileCreated {
   uuid: string;
 }
@@ -356,6 +373,8 @@ export interface GhosttyFileView {
   mtimeMs: number | null;
   entries: GhosttyEntryView[];
   includes: GhosttyIncludeView[];
+  /** Set when td will not write the file (it is not UTF-8); the reason. */
+  readOnly?: string;
 }
 
 export interface GhosttyConflict {
@@ -443,6 +462,10 @@ export interface ShellBlockModel {
   /** Entries starting with `~/` expand to `$HOME/...` at runtime. */
   path: { prepend: string[]; append: string[] };
   history: ShellHistory;
+  /**
+   * In a save: absent leaves the oh-my-zsh block as it is; an object that
+   * sets nothing (`{}`) or `null` in the JSON body removes the block.
+   */
   ohMyZsh?: OhMyZshModel;
   /** Unknown lines inside the main block, preserved verbatim. */
   extra?: string[];
@@ -508,6 +531,8 @@ export interface ShellFileView {
   outside: OutsideLine[];
   /** zsh only. */
   ohMyZsh: OhMyZshState | null;
+  /** Set when td will not write the file (it is not UTF-8); the reason. */
+  readOnly?: string;
 }
 
 /** `POST /api/shells/:shell/config/{preview|save}`. */
@@ -561,6 +586,8 @@ export interface BackupsView {
 export interface BackupContent {
   ref: BackupRef;
   content: string;
+  /** Set when td will not restore the backup (it is not UTF-8); the reason. */
+  readOnly?: string;
 }
 
 /**
@@ -577,6 +604,8 @@ export interface BackupRestoreRequest {
  */
 export interface GSettingsRestoreResult {
   restored: TerminalKind[];
+  /** Backup of the settings taken right before the restore (undo point). */
+  backup?: GSettingsBackupRef | null;
 }
 
 // ---------------------------------------------------------------------------

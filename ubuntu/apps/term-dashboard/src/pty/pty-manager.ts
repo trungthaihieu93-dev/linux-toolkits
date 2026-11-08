@@ -6,13 +6,22 @@ import {
 import { errorMessage } from '../errors';
 import type { CommandRunner } from '../exec/command-runner';
 import { findExecutable, type Env } from '../system/environment';
+import { OutputFlow } from './output-flow';
 import { MAX_COLS, MAX_ROWS, PtySession } from './pty-session';
 
 /** The transport side of one terminal connection (a WebSocket). */
 export interface PtySocket {
   send(data: string | Uint8Array): void;
   close(code: number, reason?: string): void;
+  /**
+   * Bytes queued on the socket but not yet sent. When present, terminal
+   * output stops being read while the queue is above `OUTPUT_HIGH_WATER`.
+   */
+  bufferedAmount?(): number;
 }
+
+/** Input accepted from a socket before its terminal has started. */
+export const MAX_PENDING_INPUT_BYTES = 1024 * 1024;
 
 export interface PtyConnection {
   /** A text frame (JSON control message) or a binary frame (input). */
@@ -104,8 +113,10 @@ export class PtyManager {
     };
 
     let session: PtySession | null = null;
+    let flow: OutputFlow | null = null;
     let closed = false;
     const pending: (string | ArrayBuffer | Uint8Array)[] = [];
+    let pendingBytes = 0;
 
     const handle = (data: string | ArrayBuffer | Uint8Array) => {
       if (!session) return;
@@ -153,8 +164,20 @@ export class PtyManager {
         return fail(WS_CLOSE.policy, `shell ${shell} is not executable`);
       }
       if (closed) return;
+      // closeAll() may have run while the checks above were awaited.
+      if (this.shuttingDown) {
+        return fail(WS_CLOSE.tryAgain, 'td is shutting down');
+      }
       this.sockets.add(socket);
-      const s = new PtySession({
+      const buffered = socket.bufferedAmount?.bind(socket);
+      if (buffered) {
+        flow = new OutputFlow({
+          buffered,
+          pause: () => s.pause(),
+          resume: () => s.resume(),
+        });
+      }
+      const s: PtySession = new PtySession({
         shell,
         cwd: this.deps.home,
         env: this.deps.env,
@@ -166,9 +189,12 @@ export class PtyManager {
             socket.send(d);
           } catch {
             // Closed socket; the close handler ends the session.
+            return;
           }
+          flow?.sent();
         },
         onExit: (code, signal) => {
+          flow?.dispose();
           this.sessions.delete(s);
           this.sockets.delete(socket);
           send({ type: 'exit', code, signal });
@@ -192,11 +218,20 @@ export class PtyManager {
           if (session) void session.close();
           return;
         }
-        if (!session) pending.push(data);
-        else handle(data);
+        if (session) return handle(data);
+        if (closed) return;
+        pendingBytes += byteLength(data);
+        if (pendingBytes > MAX_PENDING_INPUT_BYTES) {
+          closed = true;
+          pending.length = 0;
+          fail(WS_CLOSE.policy, 'too much input before the terminal started');
+          return;
+        }
+        pending.push(data);
       },
       closed: () => {
         closed = true;
+        flow?.dispose();
         this.sockets.delete(socket);
         if (session) {
           const s = session;

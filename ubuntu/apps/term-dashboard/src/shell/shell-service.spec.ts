@@ -150,7 +150,37 @@ describe('ShellService', () => {
   });
 });
 
+describe('ShellService encoding', () => {
+  it('shows a file that is not UTF-8 read-only and refuses a Config save', async () => {
+    const bytes = Buffer.concat([
+      Buffer.from('# '),
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from('\n'),
+    ]);
+    await writeFile(zshrc(), bytes);
+    const view = await service.fileView('zsh', 'zshrc');
+    expect(view.readOnly).toMatch(/not valid UTF-8/);
+    const error = await service
+      .saveConfig('zsh', 'zshrc', model(), view.mtimeMs)
+      .catch((e: unknown) => e);
+    expect((error as HttpError).status).toBe(422);
+    expect(await readFile(zshrc())).toEqual(bytes);
+  });
+});
+
 describe('parseShellBlockModel', () => {
+  it('keeps an absent ohMyZsh absent and turns null into a removal', () => {
+    const base = {
+      aliases: [],
+      exports: [],
+      path: { prepend: [], append: [] },
+    };
+    expect('ohMyZsh' in parseShellBlockModel(base)).toBe(false);
+    expect(parseShellBlockModel({ ...base, ohMyZsh: null }).ohMyZsh).toEqual(
+      {},
+    );
+  });
+
   it('accepts a full model', () => {
     const m = {
       aliases: [{ name: 'll', command: 'ls' }],

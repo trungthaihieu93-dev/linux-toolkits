@@ -62,6 +62,7 @@ export class ShellService {
     if (analysis.modelError !== undefined) {
       view.modelError = analysis.modelError;
     }
+    if (snap.readOnly !== undefined) view.readOnly = snap.readOnly;
     return view;
   }
 
@@ -255,7 +256,9 @@ export function parseShellBlockModel(value: unknown): ShellBlockModel {
   if (value['extra'] !== undefined) {
     model.extra = textList(value['extra'], 'extra');
   }
+  // Absent: leave the oh-my-zsh block as it is. null: remove it.
   const omz = value['ohMyZsh'];
+  if (omz === null) model.ohMyZsh = {};
   if (omz !== undefined && omz !== null) {
     if (!isObj(omz)) throw badRequest('ohMyZsh must be an object');
     model.ohMyZsh = {};

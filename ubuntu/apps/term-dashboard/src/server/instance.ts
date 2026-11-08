@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import {
   chmod,
   lstat,
@@ -9,6 +10,7 @@ import {
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { LOOPBACK } from './listen';
+import { instanceProof, secretsEqual } from './session';
 
 /** What a running td records so a second td can reuse it. */
 export interface InstanceInfo {
@@ -107,13 +109,16 @@ export async function removeInstanceFile(
   if (current?.pid === pid) await rm(file, { force: true });
 }
 
+/**
+ * Whether `pid` is a live process of ours. EPERM means the pid was reused by
+ * another user's process, so it is not a td we started.
+ */
 export function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (error) {
-    // EPERM: the pid exists but belongs to someone else.
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  } catch {
+    return false;
   }
 }
 
@@ -127,9 +132,11 @@ export interface InstanceProbeDeps {
 const baseUrl = (port: number) => `http://${LOOPBACK}:${port}`;
 
 /**
- * The running td described by `file`, or null. It counts only when the file is
- * trusted, its pid is alive, and `/api/health` on its port reports that pid; a
- * process answering on the port without a matching file is never trusted.
+ * The running td described by `file`, or null (the file is then stale). It
+ * counts only when the file is trusted, its pid is one of our live processes,
+ * and `/api/health` on its port reports that pid and proves it knows the
+ * instance secret for a fresh challenge. A process that took over the port
+ * or the pid is never trusted, and the secret is never sent to it.
  */
 export async function findRunningInstance(
   file: string,
@@ -137,13 +144,22 @@ export async function findRunningInstance(
 ): Promise<InstanceInfo | null> {
   const info = await readInstanceFile(file, deps.uid);
   if (!info || !deps.isAlive(info.pid)) return null;
+  const challenge = randomBytes(32).toString('base64url');
   try {
-    const res = await deps.fetch(`${baseUrl(info.port)}/api/health`, {
-      signal: AbortSignal.timeout(deps.timeoutMs ?? 2000),
-    });
+    const res = await deps.fetch(
+      `${baseUrl(info.port)}/api/health?challenge=${challenge}`,
+      { signal: AbortSignal.timeout(deps.timeoutMs ?? 2000) },
+    );
     if (!res.ok) return null;
-    const health = (await res.json()) as { app?: unknown; pid?: unknown };
-    return health.app === 'term-dashboard' && health.pid === info.pid
+    const health = (await res.json()) as {
+      app?: unknown;
+      pid?: unknown;
+      proof?: unknown;
+    };
+    const proven =
+      typeof health.proof === 'string' &&
+      secretsEqual(health.proof, instanceProof(info.instanceSecret, challenge));
+    return health.app === 'term-dashboard' && health.pid === info.pid && proven
       ? info
       : null;
   } catch {

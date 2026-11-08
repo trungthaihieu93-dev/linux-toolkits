@@ -113,15 +113,27 @@ export async function startServer(
     pid: deps.pid,
     webRoot: deps.webRoot,
     services,
+    notice: (line) => err.write(`${line}\n`),
   });
 
+  const refusedUids = new Set<number | string>();
   let server: RunningServer;
   try {
-    server = await listen(
-      app.fetch,
-      opts.port,
-      services ? createWebSocketServer() : undefined,
-    );
+    server = await listen(app.fetch, opts.port, {
+      websocket: services ? createWebSocketServer() : undefined,
+      peer: {
+        uid: deps.uid,
+        onRefused: (uid) => {
+          // One line per foreign uid, so a flood cannot fill the terminal.
+          const key = uid ?? 'unknown';
+          if (refusedUids.has(key)) return;
+          refusedUids.add(key);
+          err.write(
+            `td: refused a connection from ${uid === null ? 'a socket whose owner could not be found' : `another local user (uid ${uid})`}; further ones are refused silently\n`,
+          );
+        },
+      },
+    });
   } catch (error) {
     if (error instanceof PortInUseError) {
       err.write(

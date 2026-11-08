@@ -295,10 +295,37 @@ describe('applyShellModel on the fixtures', () => {
     expect(omz.ok && omz.value && r.value.split('\n')[omz.value.end + 1]).toBe(
       'source $ZSH/oh-my-zsh.sh',
     );
-    expect(applyShellModel(r.value, emptyShellModel(), 'zsh')).toEqual({
+    expect(
+      applyShellModel(r.value, { ...emptyShellModel(), ohMyZsh: {} }, 'zsh'),
+    ).toEqual({
       ok: true,
       value: zshrc,
     });
+  });
+
+  it('leaves the oh-my-zsh block alone when the model omits ohMyZsh', () => {
+    const withOmz = applyShellModel(
+      zshrc,
+      { ...full, ohMyZsh: { theme: 'agnoster', plugins: ['git'] } },
+      'zsh',
+    );
+    if (!withOmz.ok) throw new Error(withOmz.error);
+    const r = applyShellModel(withOmz.value, emptyShellModel(), 'zsh');
+    if (!r.ok) throw new Error(r.error);
+    const before = findBlock(withOmz.value, OMZ_BLOCK);
+    const after = findBlock(r.value, OMZ_BLOCK);
+    expect(before.ok && before.value?.body).toContain('agnoster');
+    expect(after.ok && after.value?.body).toBe(before.ok && before.value?.body);
+    expect(readShellModel(r.value, 'zsh')).toEqual({
+      ok: true,
+      value: {
+        ...emptyShellModel(),
+        ohMyZsh: { theme: 'agnoster', plugins: ['git'] },
+      },
+    });
+    // Omitting ohMyZsh also works when oh-my-zsh editing is disabled.
+    const twoSources = `${withOmz.value}source $ZSH/oh-my-zsh.sh\n`;
+    expect(applyShellModel(twoSources, full, 'zsh').ok).toBe(true);
   });
 
   it('fails with the reason when the oh-my-zsh source line is missing', () => {
