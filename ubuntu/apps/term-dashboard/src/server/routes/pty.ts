@@ -38,6 +38,9 @@ export function ptyRoutes(app: Hono, pty: PtyManager): void {
                 send: (data) =>
                   ws.send(data as string | Uint8Array<ArrayBuffer>),
                 close: (code, reason) => safeClose(ws, code, reason ?? ''),
+                bufferedAmount: () =>
+                  (ws.raw as { bufferedAmount?: number } | undefined)
+                    ?.bufferedAmount ?? 0,
               });
             } catch (error) {
               safeClose(
