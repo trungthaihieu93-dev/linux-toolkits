@@ -171,7 +171,14 @@ export function compareBackupTimestamps(a: string, b: string): number {
  * so the link survives.
  */
 export class FileStore {
-  private readonly locks = new KeyedMutex();
+  /** Taken first, at call time, so saves of one id run in call order. */
+  private readonly idLocks = new KeyedMutex();
+  /**
+   * Taken second, after resolving: two ids can alias one file through a
+   * symlink (~/.bash_profile -> .profile). A holder never waits for an id
+   * lock, so the two stages cannot deadlock.
+   */
+  private readonly fileLocks = new KeyedMutex();
 
   constructor(
     private readonly dirs: Dirs,
@@ -285,17 +292,19 @@ export class FileStore {
         throw badRequest(`content is larger than ${MAX_FILE_BYTES} bytes`);
       }
     }
-    // Lock by the file actually written: two ids can alias one file through
-    // a symlink (~/.bash_profile -> .profile).
-    const targets: Target[] = [];
-    for (const item of items) {
-      targets.push({ item, ...(await this.resolve(item.id, true)) });
-    }
-    const realPaths = targets.map((t) => t.realPath);
-    if (new Set(realPaths).size !== realPaths.length) {
-      throw badRequest('a save names the same file twice (through a symlink)');
-    }
-    return this.locks.runAll(realPaths, () => this.writeLocked(targets));
+    return this.idLocks.runAll(ids, async () => {
+      const targets: Target[] = [];
+      for (const item of items) {
+        targets.push({ item, ...(await this.resolve(item.id, true)) });
+      }
+      const realPaths = targets.map((t) => t.realPath);
+      if (new Set(realPaths).size !== realPaths.length) {
+        throw badRequest(
+          'a save names the same file twice (through a symlink)',
+        );
+      }
+      return this.fileLocks.runAll(realPaths, () => this.writeLocked(targets));
+    });
   }
 
   private async writeLocked(targets: readonly Target[]): Promise<SaveResult[]> {
