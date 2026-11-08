@@ -249,6 +249,31 @@ describe('SchemaField', () => {
     expect(last(changes)).toBe('light:Nord,dark:Dracula');
   });
 
+  it('theme: arrow keys keep the highlighted option in view', () => {
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    mount(
+      {
+        id: 'theme',
+        label: 'theme',
+        kind: 'theme',
+        options: Array.from({ length: 30 }, (_, i) => `Theme ${i}`),
+      },
+      '',
+    );
+    const box = screen.getByRole('combobox', { name: 'Search theme' });
+    fireEvent.focus(box);
+    scroll.mockClear();
+    for (let i = 0; i < 12; i += 1)
+      fireEvent.keyDown(box, { key: 'ArrowDown' });
+    const active = document.getElementById(
+      box.getAttribute('aria-activedescendant') ?? '',
+    );
+    expect(active?.textContent).toBe('Theme 12');
+    expect(scroll.mock.contexts.at(-1)).toBe(active);
+    expect(scroll).toHaveBeenLastCalledWith({ block: 'nearest' });
+    scroll.mockRestore();
+  });
+
   it('font: preview renders in the chosen family', () => {
     const { changes } = mount(
       {
