@@ -32,6 +32,7 @@ import { describeError, useApi, useResource } from '../../lib/api';
 import { formatBackupTs } from '../../lib/format';
 import { PageBody, PageHeader } from '../page-header';
 import { GSettingsForm } from './gsettings-form';
+import { describeGSettingsRestore } from './gsettings-restore';
 import { ProfilesPanel } from './profiles-panel';
 
 /** Newest gsettings backup that covers `kind` (backups list newest first or last). */
@@ -92,7 +93,7 @@ function RestoreBackupButton({
       toast({
         tone: 'success',
         title: 'gsettings backup restored',
-        description: `Restored: ${result.restored.join(', ') || 'nothing'}.`,
+        description: describeGSettingsRestore(result),
       });
       onRestored();
     } catch (e) {

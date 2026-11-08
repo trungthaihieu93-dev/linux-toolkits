@@ -148,4 +148,20 @@ describe('BackupsPage restore', () => {
     await waitFor(() => expect(previews(fake.calls)).toHaveLength(1));
     expect(await screen.findByRole('button', { name: 'Restore' })).toBeTruthy();
   });
+
+  it('names the backup taken before a gsettings restore and lists it', async () => {
+    const fake = await mount({ ref, content: '# ok\n' });
+    const listed = () =>
+      fake.calls.filter((c) => c.path === API_PATHS.backups).length;
+    expect(listed()).toBe(1);
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: `Restore gsettings from ${formatBackupTs(GS_TS)}`,
+      }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+    const toast = await screen.findByText(/^Restored: ptyxis\./);
+    expect(toast.textContent).toContain(UNDO_PATH);
+    await waitFor(() => expect(listed()).toBe(2));
+  });
 });

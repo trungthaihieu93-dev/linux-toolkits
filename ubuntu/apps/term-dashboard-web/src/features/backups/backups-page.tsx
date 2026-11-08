@@ -39,6 +39,7 @@ import {
 import { useToast } from '../../components/ui/toast';
 import { describeError, useApi, useResource } from '../../lib/api';
 import { formatBackupTs, formatBytes } from '../../lib/format';
+import { describeGSettingsRestore } from '../gsettings/gsettings-restore';
 import { LazyCodeEditor } from '../monaco/lazy-editors';
 import { PageBody, PageHeader } from '../page-header';
 import { SaveReviewDialog } from '../save/save-review-dialog';
@@ -211,8 +212,10 @@ export function BackupsPage() {
       toast({
         tone: 'success',
         title: 'gsettings backup restored',
-        description: `Restored: ${result.restored.join(', ') || 'nothing'}.`,
+        description: describeGSettingsRestore(result),
       });
+      // The backup taken before the restore is new: list it.
+      backups.reload();
     } catch (e) {
       toast({
         tone: 'error',
