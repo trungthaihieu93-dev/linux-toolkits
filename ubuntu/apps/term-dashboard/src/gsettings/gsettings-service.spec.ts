@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, stat } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseGSchema, type GSchema } from '@linux-toolchain/term-config';
 import { HttpError } from '../errors';
@@ -292,5 +292,42 @@ describe('GSettingsService', () => {
       0,
     );
     expect(await status(service.restore('20200101T000000Z'))).toBe(404);
+  });
+
+  it('lists user and built-in Ptyxis palettes, tolerating a failed gresource', async () => {
+    const bin = join(sbx.root, 'bin');
+    await mkdir(bin);
+    await writeFile(join(bin, 'ptyxis'), '#!/bin/sh\n', { mode: 0o755 });
+    const palettes = join(
+      sbx.env['XDG_DATA_HOME'],
+      'org.gnome.Ptyxis',
+      'palettes',
+    );
+    await mkdir(palettes, { recursive: true });
+    await writeFile(join(palettes, 'Mine.palette'), '[Palette]\n');
+    const env = { ...sbx.env, PATH: bin };
+    const dirs = resolveDirs(env, sbx.home);
+    const gres = new RecordingCommandRunner((argv) =>
+      argv[0] === 'gresource'
+        ? {
+            stdout: [
+              '/org/gnome/Ptyxis/palettes/Catppuccin Mocha.palette',
+              '/org/gnome/Ptyxis/palettes/Ubuntu.palette',
+              '/org/gnome/Ptyxis/ui/window.ui',
+            ].join('\n'),
+          }
+        : undefined,
+    );
+    const withBinary = new GSettingsService(gres, files, dirs, env);
+    expect(await withBinary.palettes('ptyxis')).toEqual([
+      'Catppuccin Mocha',
+      'Mine',
+      'Ubuntu',
+    ]);
+    expect(gres.commands()).toEqual([`gresource list ${join(bin, 'ptyxis')}`]);
+
+    gres.respond(() => ({ code: 1, stderr: 'not a gresource\n' }));
+    expect(await withBinary.palettes('ptyxis')).toEqual(['Mine']);
+    expect(await status(withBinary.palettes('gnome-terminal'))).toBe(404);
   });
 });

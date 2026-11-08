@@ -40,5 +40,6 @@ export async function previewWrite(
     check,
     baseMtimeMs: current.mtimeMs,
     candidate,
+    backupDir: store.backupsDir,
   };
 }
