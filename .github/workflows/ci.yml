@@ -59,6 +59,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # term-dashboard runs `zsh -n` on .zshrc candidates; without zsh its zsh
+      # specs and e2e case are skipped.
+      - name: Install zsh
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+
       - name: Derive Nx base and head SHAs
         if: env.NX_AFFECTED == 'true'
         uses: nrwl/nx-set-shas@v5
@@ -113,6 +118,28 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      # term-dashboard is packed and tested but stays private: it is not in
+      # the `package` artifact, and the release job never publishes it.
+      - name: Build td package
+        run: bun --bun nx build term-dashboard
+
+      - name: Pack td package
+        id: td-pack
+        working-directory: ubuntu/dist/apps/term-dashboard
+        run: |
+          test "$(jq -r .private package.json)" = true
+          mkdir -p "$RUNNER_TEMP/td-package"
+          file=$(npm pack --pack-destination "$RUNNER_TEMP/td-package" --json | jq -r '.[0].filename')
+          test -f "$RUNNER_TEMP/td-package/$file"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: td-package
+          path: ${{ runner.temp }}/td-package/${{ steps.td-pack.outputs.file }}
+          if-no-files-found: error
+          retention-days: 7
+
   node-compat:
     name: Bundle on Node ${{ matrix.node }}
     needs: checks
@@ -157,6 +184,64 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: node package/main.js --all --defaults -y --dry-run
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: td-package
+          path: ${{ runner.temp }}/td-package-artifact
+
+      - name: Extract td package
+        working-directory: ${{ runner.temp }}
+        run: mkdir td && tar -xzf td-package-artifact/*.tgz -C td
+
+      - name: td --version
+        working-directory: ${{ runner.temp }}
+        run: node td/package/main.js --version
+
+      # Starts the server in a throwaway HOME (keyfile gsettings backend, no
+      # display), checks /api/health and stops it with SIGTERM.
+      - name: td health check
+        working-directory: ${{ runner.temp }}
+        run: |
+          sandbox=$(mktemp -d)
+          trap 'rm -rf "$sandbox"' EXIT
+          mkdir -p "$sandbox/home" "$sandbox/run"
+          chmod 700 "$sandbox/run"
+          env -u DISPLAY -u WAYLAND_DISPLAY \
+            HOME="$sandbox/home" \
+            XDG_CONFIG_HOME="$sandbox/home/.config" \
+            XDG_STATE_HOME="$sandbox/home/.local/state" \
+            XDG_DATA_HOME="$sandbox/home/.local/share" \
+            XDG_CACHE_HOME="$sandbox/home/.cache" \
+            XDG_RUNTIME_DIR="$sandbox/run" \
+            GSETTINGS_BACKEND=keyfile \
+            node td/package/main.js --no-open --port 0 > "$sandbox/td.log" 2>&1 &
+          pid=$!
+          for _ in $(seq 1 100); do
+            grep -q 'listening on' "$sandbox/td.log" && break
+            sleep 0.1
+          done
+          port=$(sed -n 's#.*listening on http://127\.0\.0\.1:\([0-9]*\).*#\1#p' "$sandbox/td.log")
+          if [ -z "$port" ]; then
+            sed 's/#c=.*/#c=<redacted>/' "$sandbox/td.log"
+            kill "$pid" 2>/dev/null || true
+            exit 1
+          fi
+          curl -fsS "http://127.0.0.1:$port/api/health" | PID="$pid" node -e '
+            const health = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            if (health.app !== "term-dashboard" || health.pid !== Number(process.env.PID)) {
+              console.error("unexpected health response: " + JSON.stringify(health));
+              process.exit(1);
+            }
+            console.log("ok: td " + health.version + " answers on 127.0.0.1");
+          '
+          kill -TERM "$pid"
+          status=0
+          wait "$pid" || status=$?
+          if [ "$status" -ne 143 ]; then
+            echo "expected exit 143 after SIGTERM, got $status"
+            exit 1
+          fi
+
   smoke:
     name: Real install smoke (ubuntu:24.04, root --user)
     needs: checks
@@ -189,6 +274,19 @@ jobs:
           /usr/local/go/bin/go version
           gcc --version
           clang --version
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: td-package
+          path: /tmp/td-package-artifact
+
+      # As root td refuses to start its server, so only --version and --help
+      # run here; the e2e suite covers the server as a normal user.
+      - name: Run td tarball with npx
+        working-directory: /tmp/td-package-artifact
+        run: |
+          npx --yes ./linux-term-dashboard-*.tgz --version
+          npx --yes ./linux-term-dashboard-*.tgz --help
 
   release:
     name: Publish to npm (new version on main)
