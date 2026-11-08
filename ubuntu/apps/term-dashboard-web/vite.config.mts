@@ -24,6 +24,10 @@ export default defineConfig({
     outDir: '../../dist/apps/term-dashboard-web',
     emptyOutDir: true,
     reportCompressedSize: false,
+    // The Monaco chunk (~4 MB, editor + shell language) loads only when an
+    // editor or diff opens; the main chunk stays far below 500 kB. The plan
+    // accepts Monaco's size for a local tool.
+    chunkSizeWarningLimit: 4500,
   },
   server: {
     host: 'localhost',
