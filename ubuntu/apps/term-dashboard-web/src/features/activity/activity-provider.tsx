@@ -38,8 +38,8 @@ export function ActivityProvider({
     detail?: string;
   }>({ status: 'connecting' });
 
-  useEffect(
-    () =>
+  useEffect(() => {
+    const connect = () =>
       connectActivity({
         fetch: api.fetch,
         store,
@@ -47,9 +47,26 @@ export function ActivityProvider({
           setState({ status, detail });
           if (status === 'unauthorized') onUnauthorized();
         },
-      }),
-    [api, store, onUnauthorized],
-  );
+      });
+    let disconnect: (() => void) | null = connect();
+    // A page kept in the back/forward cache must not hold its stream open:
+    // browsers allow 6 HTTP/1.1 connections per host, and parked pages
+    // would starve the visible one. The server replays history on reconnect.
+    const onHide = () => {
+      disconnect?.();
+      disconnect = null;
+    };
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted && !disconnect) disconnect = connect();
+    };
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('pageshow', onShow);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('pageshow', onShow);
+      disconnect?.();
+    };
+  }, [api, store, onUnauthorized]);
 
   const value = useMemo(() => ({ store, ...state }), [store, state]);
   return (
