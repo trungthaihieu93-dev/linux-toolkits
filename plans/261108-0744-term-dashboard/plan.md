@@ -1,7 +1,7 @@
 ---
 title: "term-dashboard (td): local web dashboard for terminal and shell configs"
 description: "Add an Nx CLI app under ubuntu/ that ships one `td` binary: a Hono backend on 127.0.0.1 serving a Vite/React tech dashboard that manages Ghostty, Ptyxis/GNOME Terminal and bash/zsh configs, streams every command it runs, and embeds a real PTY terminal."
-status: pending
+status: in-progress
 priority: P2
 effort: 36h
 branch: main
@@ -69,7 +69,7 @@ td (main.js, Node ESM)                         browser (web/, React 19)
 ## Phases
 | # | Phase | Status | Depends on |
 |---|-------|--------|------------|
-| 1 | [Workspace scaffold, CLI, server shell and link](./phase-01-scaffold-cli-server-link.md) | Pending | none |
+| 1 | [Workspace scaffold, CLI, server shell and link](./phase-01-scaffold-cli-server-link.md) | Completed | none |
 | 2 | [term-config lib: parsers, codecs, API contract](./phase-02-term-config-lib.md) | Pending | 1 |
 | 3 | [Backend services, activity stream and PTY](./phase-03-backend-services-activity-pty.md) | Pending | 2 |
 | 4 | [Web shell, design system and terminal](./phase-04-web-shell-design-terminal.md) | Pending | 1, 2 (steps 4-5 need 3) |
@@ -126,3 +126,7 @@ Report: `plans/reports/red-team-261108-0744-term-dashboard.md`. 14 findings (2 b
 - Nx `continuous: true` is in `nx/schemas/project-schema.json` (Nx 24.0.5). `nx show project term-dashboard-web` reports `serve` as continuous, and `bun run dev:td` started both `serve` targets: the td server on 127.0.0.1:4777 printed a launch URL on `http://localhost:5173`, and the Vite proxy forwarded `GET /api/health` and `POST /api/session` (200).
 - Nx asset copying skips files matched by the root `.gitignore` (`dist`), and the esbuild executor schema rejects the per-asset `includeIgnoredFiles` flag, so a `dist/apps/term-dashboard-web` asset entry copies nothing. The CLI project therefore has an esbuild `bundle` target and a `build` target (`nx:run-commands`, depends on `bundle` and `^build`) that copies the web build into `web/`.
 - Local Node is 26.13 only. Node 22.13 and 24 are covered by the CI node-compat job (phase 6).
+
+### Execution decisions (2026-11-08)
+- WebSocket: drop the deprecated `@hono/node-ws` (its peer range is `@hono/node-server ^1`) in favour of the built-in `upgradeWebSocket` of `@hono/node-server` 2 with `ws` as an explicit devDependency; the phase 1 probe showed the built-in path works on Node and Bun.
+- CLI build is `bundle` (esbuild) + `build` (copies the web build into `web/`), because Nx asset copying skips gitignored `dist` paths.

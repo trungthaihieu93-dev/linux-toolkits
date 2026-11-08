@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Workspace scaffold, CLI, server shell and link"
-status: pending
+status: completed
 priority: P1
 effort: "5h"
 dependencies: []
