@@ -78,7 +78,9 @@ export interface ListenOptions {
  *
  * The gate tracks every socket it accepted, so `close()` can destroy them:
  * the HTTP server never sees them as its own, and `gate.close()` alone would
- * wait for each one to end (an open activity stream never does).
+ * wait for each one to end (an open activity stream never does). A socket
+ * is tracked from the moment it is accepted, so one still waiting for its
+ * peer check is destroyed too and never reaches the HTTP server.
  */
 export function listen(
   fetch: FetchHandler,
@@ -98,7 +100,6 @@ export function listen(
   const peerUid = peer.peerUid ?? readPeerUid;
   /** Every accepted socket that is still open, checked or not. */
   const sockets = new Set<Socket>();
-  let closed = false;
 
   const admit = async (socket: Socket): Promise<void> => {
     const ignore = () => undefined;
@@ -118,11 +119,9 @@ export function listen(
         uid = null;
       }
     }
+    // close() destroys every tracked socket, including one whose check was
+    // still running, so a late answer stops here.
     if (socket.destroyed) return;
-    if (closed) {
-      socket.destroy();
-      return;
-    }
     if (!isPeerAllowed(uid, peer.uid)) {
       peer.onRefused?.(uid);
       socket.destroy();
@@ -156,7 +155,6 @@ export function listen(
         server,
         close() {
           closing ??= new Promise<void>((done) => {
-            closed = true;
             gate.close(() => done());
             for (const socket of sockets) socket.destroy();
             // Stops the timeout checker; the server itself never listened,

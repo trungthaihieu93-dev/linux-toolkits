@@ -141,7 +141,7 @@ describe('listen shutdown', () => {
     expect(await within(client.closed, 1000)).toBeUndefined();
   });
 
-  it('drops a connection whose check completes after close()', async () => {
+  it('close() destroys a connection still in its peer check; the late answer serves nothing', async () => {
     const handler = vi.fn(() => new Response('ok'));
     let answer: (uid: number) => void = () => undefined;
     const peerUid = vi.fn(
