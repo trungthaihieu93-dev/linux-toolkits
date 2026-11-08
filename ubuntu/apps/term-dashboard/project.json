@@ -67,6 +67,14 @@
         "cwd": "{workspaceRoot}"
       }
     },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "command": "vitest run --config apps/term-dashboard/vitest.e2e.config.mts",
+        "cwd": "{workspaceRoot}"
+      }
+    },
     "serve": {
       "executor": "nx:run-commands",
       "continuous": true,
