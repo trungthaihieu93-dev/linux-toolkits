@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "term-config lib: parsers, codecs, API contract"
-status: pending
+status: completed
 priority: P1
 effort: "6h"
 dependencies: [1]

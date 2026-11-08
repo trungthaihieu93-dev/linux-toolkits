@@ -35,7 +35,7 @@ created: 2026-11-08
 ## Evidence (probed 2026-11-08 on this machine)
 - Ubuntu 26.04.1, Bun 1.4.4, Node 26.13. `ptyxis` 50.1 and snap `ghostty` 1.4.0 are installed. `gnome-terminal` is not installed.
 - Ptyxis schemas: `org.gnome.Ptyxis` (27 keys), relocatable `org.gnome.Ptyxis.Profile` at `/org/gnome/Ptyxis/Profiles/<uuid>/` (22 keys), `org.gnome.Ptyxis.Shortcuts`. `gsettings range` returns `enum` lists, `range d 0.0 1.0` and `type a(ss)`/`type (uu)`; `gsettings describe` returns the summary text.
-- Ghostty: `+show-config --default --docs` prints 629 keys, each with `#` doc comments and a default; `+list-themes --plain` prints 819 themes; `+list-fonts`, `+validate-config` and `+show-config` (effective config) exist. Both `~/.config/ghostty/config` and `config.ghostty` exist; `theme` set in `config` appears in the effective config, so both files are loaded.
+- Ghostty: `+show-config --default --docs` prints 629 key lines (211 distinct keys; `palette`, `keybind` and `command-palette-entry` repeat), each with `#` doc comments and a default; `+list-themes --plain` prints 819 themes; `+list-fonts`, `+validate-config` and `+show-config` (effective config) exist. Both `~/.config/ghostty/config` and `config.ghostty` exist; `theme` set in `config` appears in the effective config, so both files are loaded.
 - `script -qfec` gives a real tty under Node. `stty -F /dev/pts/N cols 140 rows 40` on the child's tty delivered SIGWINCH; `stty size` changed from `30 100` to `40 140`.
 - `bun link` in a package folder puts its bin in `~/.bun/bin` (on PATH); `bun unlink` removes it.
 - Current versions: hono 4.13.17, @hono/node-server 2.1.6, @hono/node-ws 1.3.1, react 19.3.1, vite 8.3.6 (already in the workspace), @vitejs/plugin-react 6.2.1, monaco-editor 0.57.0, @monaco-editor/react 4.7.0, @xterm/xterm 6.0.0, @xterm/addon-fit 0.11.0, tailwindcss 4.3.5, radix-ui 1.8.1, lucide-react 1.70.0, diff 9.0.0.
@@ -70,7 +70,7 @@ td (main.js, Node ESM)                         browser (web/, React 19)
 | # | Phase | Status | Depends on |
 |---|-------|--------|------------|
 | 1 | [Workspace scaffold, CLI, server shell and link](./phase-01-scaffold-cli-server-link.md) | Completed | none |
-| 2 | [term-config lib: parsers, codecs, API contract](./phase-02-term-config-lib.md) | Pending | 1 |
+| 2 | [term-config lib: parsers, codecs, API contract](./phase-02-term-config-lib.md) | Completed | 1 |
 | 3 | [Backend services, activity stream and PTY](./phase-03-backend-services-activity-pty.md) | Pending | 2 |
 | 4 | [Web shell, design system and terminal](./phase-04-web-shell-design-terminal.md) | Pending | 1, 2 (steps 4-5 need 3) |
 | 5 | [Config pages: Ghostty, Ptyxis/GNOME, shells](./phase-05-config-pages.md) | Pending | 3, 4 |
@@ -130,3 +130,4 @@ Report: `plans/reports/red-team-261108-0744-term-dashboard.md`. 14 findings (2 b
 ### Execution decisions (2026-11-08)
 - WebSocket: drop the deprecated `@hono/node-ws` (its peer range is `@hono/node-server ^1`) in favour of the built-in `upgradeWebSocket` of `@hono/node-server` 2 with `ws` as an explicit devDependency; the phase 1 probe showed the built-in path works on Node and Bun.
 - CLI build is `bundle` (esbuild) + `build` (copies the web build into `web/`), because Nx asset copying skips gitignored `dist` paths.
+- Ghostty schema: 211 distinct keys (629 key lines). Success criteria refer to every distinct key.
