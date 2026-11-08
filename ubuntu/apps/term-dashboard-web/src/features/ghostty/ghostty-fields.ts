@@ -88,10 +88,14 @@ export function ghosttyFields(
   });
 }
 
-/** Values each key has in the files, in Ghostty's load order. */
+/**
+ * Values each key has in the files, in Ghostty's load order. A path that is
+ * the same file as another (a symlink) is read once, through the other id.
+ */
 export function fileValues(config: GhosttyConfigView): Map<string, string[]> {
   const out = new Map<string, string[]>();
   for (const file of config.files) {
+    if (file.sameFileAs) continue;
     for (const e of file.entries) {
       const list = out.get(e.key);
       if (list) list.push(e.value);

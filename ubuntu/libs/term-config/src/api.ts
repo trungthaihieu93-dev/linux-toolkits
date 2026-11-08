@@ -375,6 +375,11 @@ export interface GhosttyFileView {
   includes: GhosttyIncludeView[];
   /** Set when td will not write the file (it is not UTF-8); the reason. */
   readOnly?: string;
+  /**
+   * Set when this path resolves to the same real file as another id (a
+   * symlink): td reads and writes that file only through the named id.
+   */
+  sameFileAs?: GhosttyFileId;
 }
 
 export interface GhosttyConflict {

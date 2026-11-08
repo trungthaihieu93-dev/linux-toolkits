@@ -1,6 +1,15 @@
 import { existsSync, writeFileSync } from 'node:fs';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readlink,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
+import type { GhosttyEdit } from '@linux-toolchain/term-config';
 import { HttpError } from '../errors';
 import {
   RecordingCommandRunner,
@@ -219,6 +228,81 @@ describe('GhosttyService', () => {
     });
     expect(await readFile(modern(), 'utf8')).toBe('');
     expect(await readFile(legacy(), 'utf8')).toBe('theme = x\n');
+  });
+
+  describe('when config is a symlink to config.ghostty', () => {
+    const CONTENT =
+      'font-size = 14\nkeybind = ctrl+a=select_all\ntheme = Dracula\n';
+    beforeEach(async () => {
+      await writeFile(modern(), CONTENT);
+      await symlink('config.ghostty', legacy());
+    });
+    const save = async (edit: GhosttyEdit) =>
+      service.save({
+        edits: [edit],
+        baseMtimes: {
+          ghostty: await mtime(modern()),
+          'ghostty-legacy': await mtime(legacy()),
+        },
+      });
+    const expectStillLinked = async () => {
+      expect((await lstat(legacy())).isSymbolicLink()).toBe(true);
+      expect(await readlink(legacy())).toBe('config.ghostty');
+    };
+
+    it('reports no conflicts and marks config.ghostty as the same file', async () => {
+      const view = await service.config();
+      expect(view.conflicts).toEqual([]);
+      expect(view.files.map((f) => [f.id, f.sameFileAs])).toEqual([
+        ['ghostty', 'ghostty-legacy'],
+        ['ghostty-legacy', undefined],
+      ]);
+      // Both views still show what the file holds.
+      expect(view.files[0].entries).toEqual(view.files[1].entries);
+    });
+
+    it('sets a key by writing the file once, without a both-files notice', async () => {
+      effective = 'font-size = 16\n';
+      const result = await save({ op: 'set', key: 'font-size', value: '16' });
+      expect(result.results.map((r) => r.fileId)).toEqual(['ghostty-legacy']);
+      expect(result.warnings).toEqual([]);
+      expect(await readFile(modern(), 'utf8')).toBe(
+        CONTENT.replace('14', '16'),
+      );
+      await expectStillLinked();
+    });
+
+    it('unsets a key by writing the file once', async () => {
+      const result = await save({ op: 'unset', key: 'font-size' });
+      expect(result.results.map((r) => r.fileId)).toEqual(['ghostty-legacy']);
+      expect(await readFile(modern(), 'utf8')).toBe(
+        'keybind = ctrl+a=select_all\ntheme = Dracula\n',
+      );
+      await expectStillLinked();
+    });
+
+    it('replaces a list by writing the file once, without a moved notice', async () => {
+      effective = 'keybind = ctrl+b=copy_to_clipboard\n';
+      const result = await save({
+        op: 'setList',
+        key: 'keybind',
+        values: ['ctrl+b=copy_to_clipboard'],
+      });
+      expect(result.results.map((r) => r.fileId)).toEqual(['ghostty-legacy']);
+      expect(result.warnings).toEqual([]);
+      expect(await readFile(modern(), 'utf8')).toBe(
+        'font-size = 14\nkeybind = ctrl+b=copy_to_clipboard\ntheme = Dracula\n',
+      );
+      await expectStillLinked();
+    });
+
+    it('previews one file', async () => {
+      const preview = await service.preview({
+        edits: [{ op: 'unset', key: 'theme' }],
+        baseMtimes: {},
+      });
+      expect(preview.previews.map((p) => p.fileId)).toEqual(['ghostty-legacy']);
+    });
   });
 
   it('rejects unknown keys, config-file edits, missing and stale mtimes', async () => {

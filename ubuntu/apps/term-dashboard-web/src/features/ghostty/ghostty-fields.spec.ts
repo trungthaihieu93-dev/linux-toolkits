@@ -120,6 +120,29 @@ describe('ghostty fields', () => {
     expect([...state.modified].sort()).toEqual(['font-size', 'keybind']);
   });
 
+  it('reads a file shared through a symlink once, so lists do not double', () => {
+    const entries = [
+      { key: 'font-size', value: '12', line: 1 },
+      { key: 'keybind', value: 'ctrl+t=new_tab', line: 2 },
+    ];
+    const linked: GhosttyConfigView = {
+      files: [
+        { ...CONFIG.files[0], entries, sameFileAs: 'ghostty-legacy' },
+        { ...CONFIG.files[1], entries },
+      ],
+      effective: {},
+      conflicts: [],
+    };
+    const state = ghosttyFormState(SCHEMA, linked, new Map());
+    expect(state.values['keybind']).toEqual(['ctrl+t=new_tab']);
+    expect(state.values['font-size']).toBe(12);
+    const [, , , keybind] = SCHEMA.keys;
+    // The list the form shows matches the file, so nothing is staged.
+    expect(
+      stageChange(new Map(), keybind, ['ctrl+t=new_tab'], linked).size,
+    ).toBe(0);
+  });
+
   it('stages set/setList edits and drops edits that match the files', () => {
     const [size, , , keybind] = SCHEMA.keys;
     let staged = stageChange(new Map(), size, 16, CONFIG);

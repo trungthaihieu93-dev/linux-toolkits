@@ -251,6 +251,30 @@ describe('GhosttyPage with a file td will not write', () => {
   });
 });
 
+describe('GhosttyPage with config linked to config.ghostty', () => {
+  it('says the two names are one file and shows no conflict', async () => {
+    const view = config([{ key: 'font-size', value: '12' }], 1);
+    view.files[0].sameFileAs = 'ghostty-legacy';
+    view.files.push({
+      ...view.files[0],
+      id: 'ghostty-legacy',
+      path: '/home/u/.config/ghostty/config',
+      sameFileAs: undefined,
+    });
+    await mount([view]);
+    expect(screen.queryByText(/Both files set/)).toBeNull();
+    expect(box('font-size').value).toBe('12');
+
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'config.ghostty' }), {
+      button: 0,
+    });
+    const note = await screen.findByRole('note', { name: 'Same file' });
+    expect(note.textContent).toContain(
+      'config.ghostty and config are the same file (a symlink)',
+    );
+  });
+});
+
 describe('GhosttyPage after a save', () => {
   async function save() {
     fireEvent.change(box('font-size'), { target: { value: '16' } });

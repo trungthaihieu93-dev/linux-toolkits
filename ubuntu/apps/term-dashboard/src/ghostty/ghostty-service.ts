@@ -130,6 +130,19 @@ export function parseFontList(text: string): string[] {
 const normalize = (v: string) => unquote(v.trim()).trim().toLowerCase();
 
 /**
+ * The ids td reads and edits. When both paths resolve to one real file (one
+ * is a symlink to the other) it is a single document: only `config`, which
+ * Ghostty loads last, is planned and written, so one save writes it once.
+ */
+function editable(files: Map<GhosttyFileId, LoadedFile>): GhosttyFileId[] {
+  const a = (files.get('ghostty') as LoadedFile).snap;
+  const b = (files.get('ghostty-legacy') as LoadedFile).snap;
+  return a.exists && b.exists && a.realPath === b.realPath
+    ? ['ghostty-legacy']
+    : [...GHOSTTY_FILES];
+}
+
+/**
  * Ghostty config files and the `ghostty` CLI. Edit rule: a key is edited in
  * the file that already sets it; when both files set it, in the file that
  * wins (`config`, loaded last) with a notice; new keys go to `config` when it
@@ -215,7 +228,11 @@ export class GhosttyService {
     return out;
   }
 
-  private view(id: GhosttyFileId, f: LoadedFile): GhosttyFileView {
+  private view(
+    id: GhosttyFileId,
+    f: LoadedFile,
+    sameFileAs: GhosttyFileId | undefined,
+  ): GhosttyFileView {
     const lines: GhosttyFileView['entries'] = [];
     f.doc.lines.forEach((l, i) => {
       if (l.kind === 'entry')
@@ -230,6 +247,7 @@ export class GhosttyService {
       includes: includes(f.doc),
     };
     if (f.snap.readOnly !== undefined) view.readOnly = f.snap.readOnly;
+    if (sameFileAs !== undefined) view.sameFileAs = sameFileAs;
     return view;
   }
 
@@ -250,13 +268,18 @@ export class GhosttyService {
     const installed = (await this.version()) !== null;
     const effective = installed ? await this.effective() : {};
     const files = await this.load();
+    const ids = editable(files);
     return {
       files: GHOSTTY_FILES.map((id) =>
-        this.view(id, files.get(id) as LoadedFile),
+        this.view(
+          id,
+          files.get(id) as LoadedFile,
+          ids.includes(id) ? undefined : ids[0],
+        ),
       ),
       effective,
       conflicts: findConflicts(
-        GHOSTTY_FILES.map((id) => ({
+        ids.map((id) => ({
           id,
           doc: (files.get(id) as LoadedFile).doc,
         })),
@@ -278,9 +301,10 @@ export class GhosttyService {
       }
     }
     const files = await this.load();
+    const ids = editable(files);
     const doc = (id: GhosttyFileId) => (files.get(id) as LoadedFile).doc;
     const setters = (key: string) =>
-      GHOSTTY_FILES.filter((id) => entries(doc(id)).some((e) => e.key === key));
+      ids.filter((id) => entries(doc(id)).some((e) => e.key === key));
     const fallback: GhosttyFileId = (files.get('ghostty-legacy') as LoadedFile)
       .snap.exists
       ? 'ghostty-legacy'
@@ -288,14 +312,14 @@ export class GhosttyService {
     const warnings: string[] = [];
     try {
       for (const edit of req.edits) {
-        const ids = setters(edit.key);
+        const setBy = setters(edit.key);
         if (edit.op === 'unset') {
-          for (const id of ids) unset(doc(id), edit.key);
+          for (const id of setBy) unset(doc(id), edit.key);
           continue;
         }
-        const target = ids.length > 0 ? ids[ids.length - 1] : fallback;
+        const target = setBy.length > 0 ? setBy[setBy.length - 1] : fallback;
         if (edit.op === 'set') {
-          if (ids.length > 1) {
+          if (setBy.length > 1) {
             warnings.push(
               `${edit.key} is set in both ${FILE_NAMES.ghostty} and ${FILE_NAMES['ghostty-legacy']}; editing ${FILE_NAMES[target]}, which Ghostty loads last`,
             );
@@ -303,7 +327,7 @@ export class GhosttyService {
           setValue(doc(target), edit.key, edit.value);
         } else {
           setList(doc(target), edit.key, edit.values);
-          const others = ids.filter((id) => id !== target);
+          const others = setBy.filter((id) => id !== target);
           for (const id of others) unset(doc(id), edit.key);
           if (others.length > 0) {
             warnings.push(
@@ -316,7 +340,7 @@ export class GhosttyService {
       if (error instanceof GhosttyConfigError) throw badRequest(error.message);
       throw error;
     }
-    const changed = GHOSTTY_FILES.filter((id) => doc(id).dirty);
+    const changed = ids.filter((id) => doc(id).dirty);
     return { files, changed, warnings };
   }
 

@@ -125,7 +125,9 @@ reversible.
   two of the files are one file through a symlink (`~/.bash_profile` pointing
   at `.profile`, for example). A Ghostty save
   that touches both files checks both first; if writing the second fails, the
-  first is put back from its backup.
+  first is put back from its backup. When `config` and `config.ghostty` are
+  one file through a symlink, td treats them as one: it edits and saves the
+  file once, as `config`, and reports no conflicts between them.
 - **Only UTF-8 is edited.** A file that is not valid UTF-8 is shown read-only
   with the reason, and td refuses to save it or restore a backup that is not
   UTF-8, so it never rewrites bytes it could not decode. A UTF-8 file keeps a

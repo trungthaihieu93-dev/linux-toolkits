@@ -410,6 +410,8 @@ describe('FileStore safety', () => {
   });
 
   it('refuses one save that names two ids aliasing one file', async () => {
+    // A backstop: callers that know about aliases (GhosttyService) send the
+    // shared file once; a direct save naming it twice is still refused.
     await writeFile(join(sbx.home, '.profile'), 'echo base\n');
     await symlink('.profile', join(sbx.home, '.bash_profile'));
     const base = (await store.read('profile')).mtimeMs;

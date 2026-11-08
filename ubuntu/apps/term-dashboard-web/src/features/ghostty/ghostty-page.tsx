@@ -68,6 +68,17 @@ function FileTab({ file }: { file: GhosttyFileView }) {
         )}
         {file.readOnly && <Badge variant="muted">read-only</Badge>}
       </p>
+      {file.sameFileAs && (
+        <p
+          role="note"
+          aria-label="Same file"
+          className="text-sm text-muted-foreground"
+        >
+          {FILE_LABEL[file.id]} and {FILE_LABEL[file.sameFileAs]} are the same
+          file (a symlink). td reads and saves it as{' '}
+          {FILE_LABEL[file.sameFileAs]}, which Ghostty loads last.
+        </p>
+      )}
       {file.includes.length > 0 && (
         <div className="rounded-md border p-3">
           <h3 className="font-mono text-xs uppercase tracking-wide text-muted-foreground">
