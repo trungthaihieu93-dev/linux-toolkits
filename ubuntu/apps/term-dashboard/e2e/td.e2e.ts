@@ -1,11 +1,10 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { connect } from 'node:net';
 import { networkInterfaces } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, resolve } from 'node:path';
 import type {
   ActivityEvent,
   GhosttyConfigView,
@@ -17,6 +16,7 @@ import type {
   ShellName,
   TerminalInventory,
 } from '@linux-toolchain/term-config';
+import { readPeerUid } from '../src/server/peer-uid';
 import {
   exchangeCode,
   openPty,
@@ -68,14 +68,10 @@ interface TdProcess {
   exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
 }
 
-function spawnTd(
-  sbx: Sandbox,
-  args: string[],
-  env: Record<string, string> = sbx.env,
-): ChildProcess {
+function spawnTd(sbx: Sandbox, args: string[]): ChildProcess {
   return spawn(process.execPath, [bundle, ...args], {
     cwd: sbx.home,
-    env,
+    env: sbx.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -115,9 +111,8 @@ async function startTd(sbx: Sandbox): Promise<TdProcess> {
 function runTd(
   sbx: Sandbox,
   args: string[],
-  env?: Record<string, string>,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  const child = spawnTd(sbx, args, env);
+  const child = spawnTd(sbx, args);
   let stdout = '';
   let stderr = '';
   child.stdout?.on('data', (d: Buffer) => (stdout += d.toString()));
@@ -637,43 +632,30 @@ describe('td bundle', () => {
     expect(instance).toMatchObject({ pid: td?.child.pid, port: td?.port });
   });
 
-  it('opens the browser on a private page and never passes the launch code in argv', async () => {
-    // A fake xdg-open records its argv; DISPLAY makes td try to open a browser.
-    const bin = join(sbx.root, 'fake-bin');
-    const argvLog = join(sbx.root, 'xdg-open.argv');
-    await mkdir(bin, { recursive: true });
-    await writeFile(
-      join(bin, 'xdg-open'),
-      `#!/bin/sh\nprintf '%s\\n' "$@" > '${argvLog}'\n`,
-    );
-    await chmod(join(bin, 'xdg-open'), 0o755);
-    const env = {
-      ...sbx.env,
-      DISPLAY: ':99',
-      PATH: `${bin}:${sbx.env['PATH']}`,
-    };
-
-    const second = await runTd(sbx, ['--port', '0'], env);
-    expect(second.code, second.stderr).toBe(0);
-    const code = /\/#c=([A-Za-z0-9_-]+)$/m.exec(second.stdout)?.[1] as string;
-    expect(code).toBeTruthy();
-    await until(
-      () => existsSync(argvLog) && readFileSync(argvLog, 'utf8').endsWith('\n'),
-      5000,
-      'xdg-open ran',
-    );
-    const argv = await readFile(argvLog, 'utf8');
-    expect(argv).not.toContain(code);
-    const page = fileURLToPath(argv.trim());
-    expect(dirname(page)).toBe(
-      join(sbx.env['XDG_RUNTIME_DIR'], 'term-dashboard'),
-    );
-    expect(statSync(page).mode & 0o777).toBe(0o600);
-    expect(statSync(dirname(page)).mode & 0o777).toBe(0o700);
-    expect(await readFile(page, 'utf8')).toContain(`${td?.origin}/#c=${code}`);
-
-    await exchangeCode(td?.origin as string, code);
-    await until(() => !existsSync(page), 3000, 'page deleted after use');
+  it('serves a connection whose /proc/net/tcp owner is the current user', async () => {
+    const port = td?.port as number;
+    const socket = connect(port, '127.0.0.1');
+    await new Promise<void>((r) => socket.once('connect', () => r()));
+    // The lookup td runs on accept, done here for the same socket.
+    expect(
+      await readPeerUid(
+        {
+          address: socket.localAddress as string,
+          port: socket.localPort as number,
+        },
+        { address: '127.0.0.1', port },
+      ),
+    ).toBe(process.getuid?.());
+    const response = await new Promise<string>((resolve) => {
+      let data = '';
+      socket.on('data', (d: Buffer) => (data += d.toString()));
+      socket.on('close', () => resolve(data));
+      socket.write(
+        `GET /api/health HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`,
+      );
+    });
+    expect(response).toMatch(/^HTTP\/1\.1 200/);
+    expect(response).toContain('"app":"term-dashboard"');
   });
 });
 

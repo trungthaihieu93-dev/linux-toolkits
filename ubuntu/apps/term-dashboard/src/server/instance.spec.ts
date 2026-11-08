@@ -174,32 +174,13 @@ describe('instance file', () => {
       const fetchFn = vi.fn(async () => jsonResponse({ code: 'xyz' }));
       expect(
         await requestLaunchCode(info, fetchFn as unknown as typeof fetch),
-      ).toEqual({ code: 'xyz' });
+      ).toBe('xyz');
       expect(fetchFn).toHaveBeenCalledWith(
         'http://127.0.0.1:4777/api/launch-code',
         expect.objectContaining({
           method: 'POST',
-          headers: {
-            authorization: `Bearer ${info.instanceSecret}`,
-            'content-type': 'application/json',
-          },
-          body: '{"page":false}',
+          headers: { authorization: `Bearer ${info.instanceSecret}` },
         }),
-      );
-    });
-
-    it('asks for a launch page and returns its path', async () => {
-      const fetchFn = vi.fn(async () =>
-        jsonResponse({ code: 'xyz', page: '/run/x/launch-1.html' }),
-      );
-      expect(
-        await requestLaunchCode(info, fetchFn as unknown as typeof fetch, {
-          page: true,
-        }),
-      ).toEqual({ code: 'xyz', page: '/run/x/launch-1.html' });
-      expect(fetchFn).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ body: '{"page":true}' }),
       );
     });
 

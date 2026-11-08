@@ -9,7 +9,6 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BODY_LIMITS, createApp, type AppDeps } from './app';
-import { LaunchPages } from './launch-page';
 import {
   createSessionStore,
   instanceProof,
@@ -147,42 +146,17 @@ describe('createApp', () => {
     }
   });
 
-  it('reports each redemption and deletes its launch page', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'td-app-pages-'));
-    try {
-      const pages = new LaunchPages(join(dir, 'term-dashboard'), 60_000);
-      const notice = vi.fn();
-      const { request, session } = setup(null, () => 1_000, {
-        launchPages: pages,
-        notice,
-      });
-      const res = await request(
-        '/api/launch-code',
-        postJson(
-          { page: true },
-          { authorization: `Bearer ${session.instanceSecret}` },
-        ),
-      );
-      const { code, page } = (await res.json()) as {
-        code: string;
-        page: string;
-      };
-      expect((await stat(page)).mode & 0o777).toBe(0o600);
-      expect(await readFile(page, 'utf8')).toContain(
-        `http://127.0.0.1:${PORT}/#c=${code}`,
-      );
-
-      const redeemed = await request('/api/session', postJson({ code }));
-      const { token } = (await redeemed.json()) as { token: string };
-      await expect(stat(page)).rejects.toMatchObject({ code: 'ENOENT' });
-      expect(notice).toHaveBeenCalledOnce();
-      const line = notice.mock.calls[0][0] as string;
-      expect(line).toMatch(/launch link used/);
-      expect(line).not.toContain(code);
-      expect(line).not.toContain(token);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+  it("reports each redemption on td's terminal without secrets", async () => {
+    const notice = vi.fn();
+    const { request, session } = setup(null, () => 1_000, { notice });
+    const code = session.mintLaunchCode();
+    const redeemed = await request('/api/session', postJson({ code }));
+    const { token } = (await redeemed.json()) as { token: string };
+    expect(notice).toHaveBeenCalledOnce();
+    const line = notice.mock.calls[0][0] as string;
+    expect(line).toMatch(/launch link used/);
+    expect(line).not.toContain(code);
+    expect(line).not.toContain(token);
   });
 
   it('returns 413 for an oversized body', async () => {

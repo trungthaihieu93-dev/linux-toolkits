@@ -130,8 +130,9 @@ td (paths under `apps/term-dashboard/src/`):
   `libs/term-config`), settings and backups, wired into Hono routes in
   `server/routes/`. `server/guard.ts` enforces the Host/Origin allowlist and
   the session tokens; `server/session.ts` swaps each launch code for a new
-  token; `server/launch-page.ts` writes the 0600 redirect page the browser is
-  opened on. gsettings changes are serialised per terminal kind.
+  token; `server/listen.ts` admits a connection only when `/proc/net/tcp`
+  shows its client end is owned by td's uid (`server/peer-uid.ts`). gsettings
+  changes are serialised per terminal kind.
 - **PTY** (`pty/`): `setpriv --pdeathsig HUP -- script -qfec ... /dev/null`
   over `/ws/pty`, resized with `stty -F` (rate-limited); output reading pauses
   while the WebSocket is backed up (`pty/output-flow.ts`); closing the tab or
@@ -174,16 +175,17 @@ td:
 
 - Commands td runs go through `CommandRunner` and config files are written
   only through `FileStore`. The only other side effects are td's own state
-  (`settings.json`, the instance file, launch pages), the PTY spawn and
-  opening the browser.
+  (`settings.json`, the instance file), the PTY spawn and opening the
+  browser.
 - Commands are argv arrays, never shell strings; values reach the PTY shell
   through the environment, not interpolation.
 - Clients name files by id, never by path; every route identifier is
   validated.
-- The server binds 127.0.0.1 only, needs a session token, checks Host and
-  Origin, and refuses to run as root. Neither tokens nor launch codes are ever
-  passed in a child process's argv (it is world-readable); the browser is
-  opened on a 0600 `file://` launch page.
+- The server binds 127.0.0.1 only, needs a session token (never in a URL or
+  argv), checks Host and Origin, and refuses to run as root. Connections from
+  other local users are refused by peer uid (`/proc/net/tcp`), before any
+  request is read, and the check fails closed. The launch code is single-use,
+  valid 60 s, and only useful to the same user.
 - 409 means only "file changed on disk"; other refusals of a valid request
   use 422 (see the status list in `libs/term-config/src/api.ts`).
 - Managed-block markers (`# >>> term-dashboard >>>`,

@@ -9,7 +9,6 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { LaunchCodeResponse } from '@linux-toolchain/term-config';
 import { LOOPBACK } from './listen';
 import { instanceProof, secretsEqual } from './session';
 
@@ -168,32 +167,23 @@ export async function findRunningInstance(
   }
 }
 
-/**
- * Ask the running instance for a fresh launch code and, with `page`, a
- * private redirect page for the browser.
- */
+/** Ask the running instance for a fresh launch code. */
 export async function requestLaunchCode(
   info: InstanceInfo,
   fetchFn: typeof fetch,
-  opts: { page?: boolean; timeoutMs?: number } = {},
-): Promise<LaunchCodeResponse> {
+  timeoutMs = 2000,
+): Promise<string> {
   const res = await fetchFn(`${baseUrl(info.port)}/api/launch-code`, {
     method: 'POST',
-    headers: {
-      authorization: `Bearer ${info.instanceSecret}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ page: opts.page === true }),
-    signal: AbortSignal.timeout(opts.timeoutMs ?? 2000),
+    headers: { authorization: `Bearer ${info.instanceSecret}` },
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) {
     throw new Error(`running td refused a launch code (HTTP ${res.status})`);
   }
-  const body = (await res.json()) as { code?: unknown; page?: unknown };
+  const body = (await res.json()) as { code?: unknown };
   if (typeof body.code !== 'string' || body.code.length === 0) {
     throw new Error('running td returned no launch code');
   }
-  return typeof body.page === 'string'
-    ? { code: body.code, page: body.page }
-    : { code: body.code };
+  return body.code;
 }

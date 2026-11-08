@@ -115,21 +115,9 @@ export interface SessionResponse {
   token: string;
 }
 
-/**
- * `POST /api/launch-code` (instance secret only; used by a second `td`).
- * Optional body `{ "page": true }` also writes a private redirect page.
- */
-export interface LaunchCodeRequest {
-  page?: boolean;
-}
+/** `POST /api/launch-code` (instance secret only; used by a second `td`). */
 export interface LaunchCodeResponse {
   code: string;
-  /**
-   * Absolute path of a 0600 HTML file that redirects to the launch URL; open
-   * it as `file://` so the code never appears in a process argument list.
-   * The running td deletes it once the code is redeemed or expires.
-   */
-  page?: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,13 +1,8 @@
 import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import type {
-  ApiError,
-  LaunchCodeResponse,
-} from '@linux-toolchain/term-config';
-import { errorMessage, HttpError } from '../errors';
+import type { ApiError } from '@linux-toolchain/term-config';
+import { HttpError } from '../errors';
 import { createGuard, type AccessPolicy } from './guard';
-import { launchUrl, type LaunchPages } from './launch-page';
-import { LOOPBACK } from './listen';
 import { activityRoutes } from './routes/activity';
 import { backupRoutes } from './routes/backups';
 import { ghosttyRoutes } from './routes/ghostty';
@@ -45,8 +40,6 @@ export interface AppDeps {
   fileContentRoutes?: readonly RegExp[];
   /** Backend services; without them only health, session and static are served. */
   services?: Services;
-  /** Redirect pages for launch codes; deleted when their code is redeemed. */
-  launchPages?: LaunchPages;
   /** One line per notable event for td's own terminal (never secrets). */
   notice?: (line: string) => void;
 }
@@ -145,37 +138,15 @@ export function createApp(deps: AppDeps): Hono {
     if (token === null) {
       return c.json({ error: 'invalid or expired launch code' }, 401);
     }
-    await deps.launchPages?.spent(code).catch(() => undefined);
     deps.notice?.(
       `td: launch link used; browser session ${deps.session.sessionCount} started (if that was not you, stop td with Ctrl+C)`,
     );
     return c.json({ token });
   });
 
-  app.post('/api/launch-code', async (c) => {
-    let wantPage = false;
-    const text = await c.req.text();
-    if (text.trim() !== '') {
-      try {
-        wantPage = (JSON.parse(text) as { page?: unknown })?.page === true;
-      } catch {
-        return c.json<ApiError>({ error: 'expected a JSON body' }, 400);
-      }
-    }
-    const code = deps.session.mintLaunchCode();
-    const body: LaunchCodeResponse = { code };
-    if (wantPage && deps.launchPages) {
-      const url = launchUrl(`http://${LOOPBACK}:${deps.policy.port()}`, code);
-      try {
-        body.page = await deps.launchPages.create(code, url);
-      } catch (error) {
-        deps.notice?.(
-          `td: could not write a launch page: ${errorMessage(error)}`,
-        );
-      }
-    }
-    return c.json(body);
-  });
+  app.post('/api/launch-code', (c) =>
+    c.json({ code: deps.session.mintLaunchCode() }),
+  );
 
   const s = deps.services;
   if (s) {

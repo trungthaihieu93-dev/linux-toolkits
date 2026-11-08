@@ -59,13 +59,6 @@ for a new code, prints the URL, opens the browser and exits 0 without starting
 another server. Without `DISPLAY` or `WAYLAND_DISPLAY`, or with `--no-open`,
 td only prints the URL in your terminal.
 
-To open the browser, td writes a small private page
-(`$XDG_RUNTIME_DIR/term-dashboard/launch-*.html`, mode 0600, or the same name
-under `~/.local/state/term-dashboard/` without `XDG_RUNTIME_DIR`) that
-forwards to the launch URL, and opens that file. The page is deleted as soon
-as its code is used or expires. If your browser cannot read that folder (some
-sandboxed browser packages cannot), open the printed URL yourself.
-
 Exit codes: `0` success, `1` error, `2` usage error, and `129`, `130` or `143`
 after SIGHUP, SIGINT or SIGTERM. Stopping td by any of these signals ends every
 terminal it opened, background jobs included.
@@ -81,17 +74,22 @@ reversible.
 
 - **Loopback only.** The server binds `127.0.0.1` and nothing else. There is no
   option to listen on another interface.
+- **Your connections only.** Loopback is shared by every user on the machine,
+  so connections from other local users are refused by peer uid: for each
+  accepted connection td looks up the owner of its client end in
+  `/proc/net/tcp` and closes it, before reading anything, unless it is you.
+  A connection whose owner cannot be found is refused too.
 - **Session tokens.** Every API call and the terminal WebSocket need a
   256-bit session token. The browser gets one by redeeming the single-use
   launch code from the URL fragment (`#c=...`); every redemption gets its own
   token, and all tokens end when td stops. td prints one line on its terminal
   each time a code is used, so a session you did not start is visible; stop
   td with Ctrl+C if you see one.
-- **No secrets in process arguments.** Every local user can read the
-  argument lists of all processes (`/proc/<pid>/cmdline`), so neither the
-  token nor the launch code is ever passed to another program: the browser is
-  opened on the private 0600 launch page described above. The URL with the
-  code is printed only to td's own terminal.
+- **Launch code.** The code in the launch URL is single-use and expires
+  after 60 seconds. It is passed to `xdg-open` and the browser, so other
+  local users may see it in the process list, but it is only useful to you:
+  their connections are refused by the peer check. The session token itself
+  never appears in a URL or in a process argument list.
 - **Second start.** A second `td` reads a separate instance secret from
   `$XDG_RUNTIME_DIR/term-dashboard/instance.json` (mode 0600) to mint new
   codes. Before it sends the secret, the running instance must prove it knows
