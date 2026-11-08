@@ -6,14 +6,15 @@ Inputs: `plans/reports/code-review-261108-td-backend.md`; web-review items M3/L2
 
 ## Outcome
 
-Every accepted finding is fixed test-first: each new spec was run and seen failing before its fix landed. Four focused commits (`Refs #13`):
+Every accepted finding is fixed. Each new spec was run and seen failing before its fix landed, except the pure `/proc/net/tcp` parser spec, which was written together with its module. The gate wiring spec did fail against the old `listen`. Focused commits (`Refs #13`):
 
 | Commit    | Subject                                                                   |
 | --------- | ------------------------------------------------------------------------- |
 | `bb129b2` | fix(term-dashboard): make file saves atomic and lossless                  |
 | `4acc71b` | fix(term-dashboard): make gsettings restores undoable and changes ordered |
 | `fa98151` | fix(term-dashboard): bound PTY memory and close start-up races            |
-| `e05daab` | fix(term-dashboard): keep launch codes out of process arguments           |
+| `e05daab` | fix(term-dashboard): keep launch codes out of process arguments (superseded in part by `faaff3c`) |
+| `faaff3c` | fix(term-dashboard): refuse connections from other local users            |
 
 ## Verification
 
@@ -21,11 +22,13 @@ Every accepted finding is fixed test-first: each new spec was run and seen faili
 | ----------------------------------------------------------------------------------- | ------------------------- |
 | `bun --bun nx run-many -t lint test build -p term-config term-dashboard --skip-nx-cache` | exit 0, 7/7 tasks         |
 | `bun --bun nx run term-dashboard:e2e --skip-nx-cache`                                | exit 0, 16/16 e2e tests   |
+
+These results are from the final tree, after the peer-check change.
 | `bun run format:check`                                                               | exit 0                    |
 | `tsc -p apps/term-dashboard/tsconfig.app.json --noEmit`                              | clean                     |
 | `tsc -p apps/term-dashboard-web/tsconfig.app.json --noEmit` (read-only check)        | clean with the new contract |
 
-Unit tests: term-dashboard 210 tests in 25 files, term-config 175 tests in 11 files. No e2e case was skipped (zsh, PTY tools, ss, ghostty and the Ptyxis schema are all present).
+Unit tests: term-dashboard 217 tests in 26 files, term-config 175 tests in 11 files. No e2e case was skipped (zsh, PTY tools, ss, ghostty and the Ptyxis schema are all present).
 
 Real-system safety: `sha256sum ~/.zshrc ~/.bashrc ~/.config/ghostty/config*` and `gsettings list-recursively org.gnome.Ptyxis | sha256sum` were recorded before and after. The two sets are identical. All tests used a temporary HOME with `GSETTINGS_BACKEND=keyfile`; the `dconf` CLI was never used. No td, script or shell processes were left running.
 
@@ -33,13 +36,22 @@ Real-system safety: `sha256sum ~/.zshrc ~/.bashrc ~/.config/ghostty/config*` and
 
 ### High
 
-- **H1: launch code in argv.** The browser is opened on `file://` + a 0600 page `launch-<128-bit hex>.html` in the 0700 folder next to the instance file. That folder is `$XDG_RUNTIME_DIR/term-dashboard/`, or `~/.local/state/term-dashboard/` when `XDG_RUNTIME_DIR` is missing. The page redirects with a meta refresh and `location.replace` to `http://127.0.0.1:<port>/#c=<code>`. It is deleted when its code is redeemed, when the code expires (60 s timer), and on shutdown.
-  - Second-instance handover: the running instance writes the page (`POST /api/launch-code` body `{"page":true}` → `{code, page}`). The second td opens it only after checking that the path is a page name in its own page folder and a regular 0600 file it owns.
-  - If the page cannot be written, td does not fall back to argv. It prints "not opening a browser…; open the URL above yourself".
-  - Each redemption issues a distinct token. Any issued token authorises, and all tokens die with the process.
-  - Each redemption prints one stderr line: `td: launch link used; browser session N started (if that was not you, stop td with Ctrl+C)`. The line contains no secret.
-  - `--no-open` and a missing display still print the URL to stdout.
-  - Specs: `server/launch-page.spec.ts`, `session.spec.ts`, `app.spec.ts`, `cli/start.spec.ts`. A new e2e case puts a recording `xdg-open` on PATH and asserts that its argv never contains the code, that the page and folder modes are right, and that the page is deleted after redemption.
+- **H1: another local user redeeming the launch code.** The design changed after review (coordinator decision). A first version opened the browser on a private 0600 `file://` redirect page. Ubuntu's default snap Firefox cannot read `/run/user/<uid>` or hidden folders under HOME, so that version was replaced by a peer-credential check that makes the cross-user attack impossible regardless of argv.
+  - **Gate:** `server/listen.ts` accepts TCP connections on a `net` server with `pauseOnConnect`. For each socket, it looks up the owner of the client end in `/proc/net/tcp` and `/proc/net/tcp6`: the row whose local address is the socket's remote address and port, and whose remote address is td's address and port. The socket is handed to the HTTP server (`emit('connection')`, then `resume()`) only if that uid equals td's uid. Otherwise it is destroyed before any byte is read. This covers HTTP and WebSocket upgrades alike.
+  - **Fail closed:** when no row is found, the lookup retries once after 25 ms. If there is still no row, or `/proc` cannot be read, the connection is refused. The check runs once per socket at accept, which serves as the per-socket cache.
+  - **Notice:** td prints one stderr line per refused uid (or "owner could not be found"), so a flood cannot fill the terminal.
+  - **Module:** `server/peer-uid.ts` is a pure parser plus decision: little-endian or big-endian hex words for IPv4 and IPv6, with IPv4-mapped tcp6 rows unwrapped and addresses canonicalised. A thin reader sits on top.
+  - **Browser and handover:** both are back to the plain `http://127.0.0.1:<port>/#c=<code>` passed to `xdg-open`. The launch-page module, its cleanup and its API field were removed.
+  - **Kept:**
+    - a distinct session token per redemption, valid until the process ends;
+    - one stderr line per redemption (`td: launch link used; browser session N started …`, no secret);
+    - `--no-open` printing the URL.
+  - **Specs:**
+    - `server/peer-uid.spec.ts`, on fixture text: matching row, another uid, missing row, tcp6 v4-mapped, a retry, `/proc` unreadable.
+    - `server/listen.spec.ts`: a real same-uid connection is served through the real `/proc` lookup. With an injected foreign uid or null, the socket is dropped before the handler runs and `onRefused` gets the uid.
+    - `session.spec.ts`, `app.spec.ts` and `cli/start.spec.ts`: per-redemption tokens and the notice line.
+    - e2e: against the built bundle, `/proc/net/tcp` attributes the test's own socket to the current uid, and td serves a request on that socket.
+  - **Limit:** a real foreign-uid connection cannot be made without root (a user namespace does not change the kernel uid shown in `/proc/net/tcp`), so the refusal decision is tested by injection and by fixtures, not end to end.
 
 ### Medium
 
@@ -85,16 +97,16 @@ All of these are compatible additions; nothing was renamed or removed.
 - New `readOnly?: string` on `ShellFileView`, `GhosttyFileView` and `BackupContent`. When set, disable saving or restoring and show the text.
 - `GSettingsRestoreResult.backup?: GSettingsBackupRef | null` is the pre-restore backup and can be offered as "undo restore".
 - `ShellBlockModel.ohMyZsh` in a save: absent means unchanged, and `{}` or `null` means remove. Note for the web side: `normalizeModel` in `shell-page.tsx` deletes an empty `ohMyZsh`. If the UI ever lets the user clear the omz block, it must send `ohMyZsh: {}` (or `null`) explicitly.
-- `Health.proof?`, `LaunchCodeRequest { page?: boolean }` and `LaunchCodeResponse.page?` are td-to-td only.
+- `Health.proof?` is td-to-td only. `LaunchCodeResponse` is unchanged (`{ code }`).
 - Every redemption of a launch code now returns a different token. All of them stay valid until td stops.
 
 ## Docs
 
 - `ubuntu/apps/term-dashboard/README.md`:
-  - Usage section: the launch page.
   - Safety model:
+    - connections from other local users are refused by peer uid (`/proc/net/tcp`);
+    - the launch code is single-use, valid 60 s, and only useful to the same user;
     - session tokens and the per-redemption stderr line;
-    - no secrets in argv;
     - second-start verification;
     - anti-framing;
     - bounded memory;
@@ -106,17 +118,18 @@ All of these are compatible additions; nothing was renamed or removed.
   - Backups: restore takes an undo backup and reports failed keys.
 - Root `AGENTS.md`, td sections only:
   - FileStore pipeline (lock, 422 for non-UTF-8, `sh -n`, `writeMany`);
-  - session and launch-page modules;
+  - session tokens and the peer-uid gate in `listen.ts` / `peer-uid.ts`;
   - PTY flow control and rate-limited resize;
-  - invariants: no tokens or codes in argv, and 409 reserved for file conflicts.
+  - invariants: other local users are refused by peer uid and the check fails closed; the launch code is single-use, valid 60 s and only useful to the same user; 409 is reserved for file conflicts.
 
 ## Follow-ups and concerns
 
 - **Full CSP (follow-up):** a full Content-Security-Policy needs a `sha256-` hash for the inline pre-paint theme script in the web `index.html`, and that file belongs to the web side. Only `frame-ancestors 'none'` is sent for now.
-- **Sandboxed browsers:** Ubuntu's default Firefox is a snap, and snap confinement may refuse `file:///run/user/<uid>/…` and hidden folders under `~` (the same issue Jupyter's redirect file has). In that case the browser shows an access error, and the user must open the printed URL. The README says so. This was not tested against a real snap Firefox: no browser was launched, and the e2e test uses a recording `xdg-open`.
+- **Launch code is still visible in argv:** other local users can still see the code in the process list, and the README says so. It is useless to them because their connections are refused. Processes running as the same uid were never inside the threat model.
+- **Linux `/proc` dependency:** the gate needs `/proc/net/tcp`. td targets Linux, and the check fails closed without it, so td would refuse every connection rather than serve unchecked ones.
 - **Pre-existing spec type errors:** `tsc -p apps/term-dashboard/tsconfig.spec.json` reports 6 errors in `src/server/routes/routes.spec.ts`. They exist before these changes too (checked on a clean tree), and no Nx target runs that check. Not fixed here.
 - **mtime detection limit:** external editors that write within the same mtime tick as td's read remain undetectable by mtime alone. td's own writes are now always detected.
 
 Status: DONE
-Summary: All accepted backend findings (H1, M1-M5, web L2, L1-L6, L8, L10) are fixed test-first in four commits. lint/test/build, e2e and format:check all exit 0, and the real dotfile and Ptyxis hashes are unchanged.
-Concerns/Blockers: Snap-confined browsers may refuse the private file:// launch page (the URL is still printed); a full CSP needs a hash for the web inline script; 6 pre-existing type errors in routes.spec.ts.
+Summary: All accepted backend findings are fixed. The launch-code exposure is now closed by a fail-closed peer-uid check on every connection (`/proc/net/tcp`) instead of a `file://` page, and the browser opens the plain URL again. lint/test/build, e2e and format:check all exit 0, and the real dotfile and Ptyxis hashes are unchanged.
+Concerns/Blockers: The foreign-uid refusal is tested by injection and fixtures only (no root). A full CSP needs a hash for the web inline script. There are 6 pre-existing type errors in routes.spec.ts.
