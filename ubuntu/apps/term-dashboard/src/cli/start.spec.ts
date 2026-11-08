@@ -1,7 +1,8 @@
 import { createServer } from 'node:net';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createCleanupRegistry, type ShutdownSignal } from '../server/cleanup';
 import { isProcessAlive, readInstanceFile } from '../server/instance';
 import { startServer, type StartDeps, type StartOptions } from './start';
@@ -85,7 +86,16 @@ describe('startServer', () => {
     await until(() => first.out.join('').includes('#c='));
 
     const { origin, port, code } = launchUrl(first.out.join(''));
-    expect(first.openUrl).toHaveBeenCalledWith(`${origin}/#c=${code}`);
+    // The browser gets a private file:// page; the code is never in argv.
+    expect(first.openUrl).toHaveBeenCalledOnce();
+    const opened = first.openUrl.mock.calls[0][0] as string;
+    expect(opened).toMatch(/^file:\/\/.*\/launch-[0-9a-f]{32}\.html$/);
+    expect(opened).not.toContain(code);
+    const page = fileURLToPath(opened);
+    expect(dirname(page)).toBe(dirname(first.deps.instanceFile));
+    expect((await stat(page)).mode & 0o777).toBe(0o600);
+    expect((await stat(dirname(page))).mode & 0o777).toBe(0o700);
+    expect(await readFile(page, 'utf8')).toContain(`${origin}/#c=${code}`);
     const instance = await readInstanceFile(
       first.deps.instanceFile,
       first.deps.uid,
@@ -106,6 +116,12 @@ describe('startServer', () => {
       body: JSON.stringify({ code }),
     });
     expect(session.status).toBe(200);
+    const { token } = (await session.json()) as { token: string };
+    await expect(stat(page)).rejects.toMatchObject({ code: 'ENOENT' });
+    const notices = first.err.join('');
+    expect(notices).toMatch(/launch link used/);
+    expect(notices).not.toContain(code);
+    expect(notices).not.toContain(token);
 
     // A second td reuses the first one and exits 0.
     const second = harness(dir);
@@ -116,6 +132,12 @@ describe('startServer', () => {
     const reused = launchUrl(second.out.join(''));
     expect(reused.port).toBe(port);
     expect(second.openUrl).toHaveBeenCalledOnce();
+    const handover = second.openUrl.mock.calls[0][0] as string;
+    expect(handover).toMatch(/^file:\/\/.*\/launch-[0-9a-f]{32}\.html$/);
+    expect(handover).not.toContain(reused.code);
+    expect(await readFile(fileURLToPath(handover), 'utf8')).toContain(
+      `#c=${reused.code}`,
+    );
 
     first.signal('SIGTERM');
     expect(await exit).toBe(143);

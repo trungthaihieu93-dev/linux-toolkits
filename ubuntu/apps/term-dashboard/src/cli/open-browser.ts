@@ -2,8 +2,10 @@ import { execFile } from 'node:child_process';
 import type { TextSink } from './start';
 
 /**
- * Open `url` with xdg-open (argv, no shell). Failures are reported, never
- * fatal: the URL is already printed.
+ * Open `url` with xdg-open (argv, no shell). Callers pass the `file://` URL
+ * of a private launch page, never a URL that carries a launch code: argv is
+ * readable by every local user. Failures are reported, never fatal: the
+ * launch URL is already printed.
  */
 export function openBrowser(url: string, err: TextSink): void {
   try {

@@ -1,10 +1,11 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { connect } from 'node:net';
 import { networkInterfaces } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type {
   ActivityEvent,
   GhosttyConfigView,
@@ -67,10 +68,14 @@ interface TdProcess {
   exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
 }
 
-function spawnTd(sbx: Sandbox, args: string[]): ChildProcess {
+function spawnTd(
+  sbx: Sandbox,
+  args: string[],
+  env: Record<string, string> = sbx.env,
+): ChildProcess {
   return spawn(process.execPath, [bundle, ...args], {
     cwd: sbx.home,
-    env: sbx.env,
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 }
@@ -110,8 +115,9 @@ async function startTd(sbx: Sandbox): Promise<TdProcess> {
 function runTd(
   sbx: Sandbox,
   args: string[],
+  env?: Record<string, string>,
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  const child = spawnTd(sbx, args);
+  const child = spawnTd(sbx, args, env);
   let stdout = '';
   let stderr = '';
   child.stdout?.on('data', (d: Buffer) => (stdout += d.toString()));
@@ -369,7 +375,10 @@ describe('td bundle', () => {
       });
     const first = await redeem();
     expect(first.status).toBe(200);
-    expect(((await first.json()) as { token: string }).token).toBe(token);
+    // Each redemption gets its own token.
+    const second = ((await first.json()) as { token: string }).token;
+    expect(second).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(second).not.toBe(token);
     expect((await redeem()).status).toBe(401);
   });
 
@@ -613,15 +622,58 @@ describe('td bundle', () => {
       'm',
     ).exec(second.stdout);
     expect(m, second.stdout).not.toBeNull();
-    expect(await exchangeCode(td?.origin as string, m?.[1] as string)).toBe(
-      token,
-    );
+    // Every redemption gets its own token; the first one stays valid.
+    const another = await exchangeCode(td?.origin as string, m?.[1] as string);
+    expect(another).not.toBe(token);
+    const settings = await fetch(`${td?.origin}/api/settings`, {
+      headers: { authorization: `Bearer ${another}` },
+    });
+    expect(settings.status).toBe(200);
 
     const instance = JSON.parse(await readFile(instanceFile, 'utf8')) as {
       pid: number;
       port: number;
     };
     expect(instance).toMatchObject({ pid: td?.child.pid, port: td?.port });
+  });
+
+  it('opens the browser on a private page and never passes the launch code in argv', async () => {
+    // A fake xdg-open records its argv; DISPLAY makes td try to open a browser.
+    const bin = join(sbx.root, 'fake-bin');
+    const argvLog = join(sbx.root, 'xdg-open.argv');
+    await mkdir(bin, { recursive: true });
+    await writeFile(
+      join(bin, 'xdg-open'),
+      `#!/bin/sh\nprintf '%s\\n' "$@" > '${argvLog}'\n`,
+    );
+    await chmod(join(bin, 'xdg-open'), 0o755);
+    const env = {
+      ...sbx.env,
+      DISPLAY: ':99',
+      PATH: `${bin}:${sbx.env['PATH']}`,
+    };
+
+    const second = await runTd(sbx, ['--port', '0'], env);
+    expect(second.code, second.stderr).toBe(0);
+    const code = /\/#c=([A-Za-z0-9_-]+)$/m.exec(second.stdout)?.[1] as string;
+    expect(code).toBeTruthy();
+    await until(
+      () => existsSync(argvLog) && readFileSync(argvLog, 'utf8').endsWith('\n'),
+      5000,
+      'xdg-open ran',
+    );
+    const argv = await readFile(argvLog, 'utf8');
+    expect(argv).not.toContain(code);
+    const page = fileURLToPath(argv.trim());
+    expect(dirname(page)).toBe(
+      join(sbx.env['XDG_RUNTIME_DIR'], 'term-dashboard'),
+    );
+    expect(statSync(page).mode & 0o777).toBe(0o600);
+    expect(statSync(dirname(page)).mode & 0o777).toBe(0o700);
+    expect(await readFile(page, 'utf8')).toContain(`${td?.origin}/#c=${code}`);
+
+    await exchangeCode(td?.origin as string, code);
+    await until(() => !existsSync(page), 3000, 'page deleted after use');
   });
 });
 

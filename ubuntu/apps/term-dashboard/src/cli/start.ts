@@ -1,3 +1,6 @@
+import { lstat } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createApp } from '../server/app';
 import {
   SIGNAL_EXIT_CODES,
@@ -5,6 +8,11 @@ import {
   type SignalSource,
 } from '../server/cleanup';
 import type { AccessPolicy } from '../server/guard';
+import {
+  isLaunchPagePath,
+  LaunchPages,
+  launchUrl,
+} from '../server/launch-page';
 import {
   findRunningInstance,
   removeInstanceFile,
@@ -44,6 +52,10 @@ export interface StartDeps {
   isAlive: (pid: number) => boolean;
   /** Whether a graphical session exists to open a browser in. */
   canOpenBrowser: boolean;
+  /**
+   * Opens a `file://` URL of a private launch page in the browser. The launch
+   * code itself is never passed, since process argv is world-readable.
+   */
   openUrl: (url: string) => void;
   signals: SignalSource;
   cleanups: CleanupRegistry;
@@ -55,9 +67,7 @@ export interface StartDeps {
 
 export const EXIT = { ok: 0, error: 1, usage: 2 } as const;
 
-export function launchUrl(origin: string, code: string): string {
-  return `${origin}/#c=${code}`;
-}
+export { launchUrl };
 
 const message = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -79,17 +89,31 @@ export async function startServer(
     return EXIT.error;
   }
 
-  const open = (url: string) => {
-    if (opts.open && deps.canOpenBrowser) deps.openUrl(url);
-  };
+  const wantBrowser = opts.open && deps.canOpenBrowser;
+  // Launch pages live next to the instance file: $XDG_RUNTIME_DIR/term-dashboard
+  // or, without XDG_RUNTIME_DIR, the 0700 state folder.
+  const pageDir = dirname(deps.instanceFile);
+  const openPage = (page: string) => deps.openUrl(pathToFileURL(page).href);
+  const noPage = (why: string) =>
+    err.write(
+      `td: not opening a browser (${why}); open the URL above yourself\n`,
+    );
 
   const running = await findRunningInstance(deps.instanceFile, deps);
   if (running) {
     try {
-      const code = await requestLaunchCode(running, deps.fetch);
+      const { code, page } = await requestLaunchCode(running, deps.fetch, {
+        page: wantBrowser,
+      });
       const url = launchUrl(`http://${LOOPBACK}:${running.port}`, code);
       out.write(`td already running (pid ${running.pid})\n${url}\n`);
-      open(url);
+      if (wantBrowser) {
+        if (page !== undefined && (await isOwnPage(pageDir, page, deps.uid))) {
+          openPage(page);
+        } else {
+          noPage('the running td did not create a private launch page');
+        }
+      }
       return EXIT.ok;
     } catch (error) {
       err.write(
@@ -105,6 +129,7 @@ export async function startServer(
     devOrigin: opts.devOrigin,
   };
   const session = createSessionStore();
+  const launchPages = new LaunchPages(pageDir, LAUNCH_CODE_TTL_MS);
   const services = deps.createServices?.();
   const app = createApp({
     session,
@@ -113,6 +138,8 @@ export async function startServer(
     pid: deps.pid,
     webRoot: deps.webRoot,
     services,
+    launchPages,
+    notice: (line) => err.write(`${line}\n`),
   });
 
   let server: RunningServer;
@@ -149,11 +176,22 @@ export async function startServer(
     removeInstanceFile(deps.instanceFile, deps.pid, deps.uid),
   );
   deps.cleanups.register(() => server.close());
+  deps.cleanups.register(() => launchPages.removeAll());
   // Registered last, so it runs first: terminals end before the server stops.
   if (services) deps.cleanups.register(() => services.close());
 
   const origin = opts.devOrigin?.origin ?? `http://${LOOPBACK}:${boundPort}`;
-  const url = launchUrl(origin, session.mintLaunchCode());
+  const code = session.mintLaunchCode();
+  const url = launchUrl(origin, code);
+  let page: string | null = null;
+  let pageError: string | null = null;
+  if (wantBrowser) {
+    try {
+      page = await launchPages.create(code, url);
+    } catch (error) {
+      pageError = `could not write a private launch page: ${message(error)}`;
+    }
+  }
   out.write(
     [
       `td ${deps.version} listening on http://${LOOPBACK}:${boundPort}`,
@@ -163,7 +201,8 @@ export async function startServer(
       '',
     ].join('\n'),
   );
-  open(url);
+  if (page !== null) openPage(page);
+  else if (pageError !== null) noPage(pageError);
 
   return new Promise<number>((resolve) => {
     let stopping = false;
@@ -181,4 +220,22 @@ export async function startServer(
       });
     });
   });
+}
+
+/**
+ * A launch page path from the running td is opened only when it is a page
+ * name in our page folder, and a regular 0600 file owned by us.
+ */
+async function isOwnPage(
+  dir: string,
+  page: string,
+  uid: number,
+): Promise<boolean> {
+  if (!isLaunchPagePath(dir, page)) return false;
+  try {
+    const info = await lstat(page);
+    return info.isFile() && info.uid === uid && (info.mode & 0o777) === 0o600;
+  } catch {
+    return false;
+  }
 }

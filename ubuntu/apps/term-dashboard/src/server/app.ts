@@ -1,8 +1,13 @@
 import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import type { ApiError } from '@linux-toolchain/term-config';
-import { HttpError } from '../errors';
+import type {
+  ApiError,
+  LaunchCodeResponse,
+} from '@linux-toolchain/term-config';
+import { errorMessage, HttpError } from '../errors';
 import { createGuard, type AccessPolicy } from './guard';
+import { launchUrl, type LaunchPages } from './launch-page';
+import { LOOPBACK } from './listen';
 import { activityRoutes } from './routes/activity';
 import { backupRoutes } from './routes/backups';
 import { ghosttyRoutes } from './routes/ghostty';
@@ -12,7 +17,7 @@ import { ptyRoutes } from './routes/pty';
 import { settingsRoutes } from './routes/settings';
 import { shellRoutes } from './routes/shells';
 import type { Services } from './services';
-import type { SessionStore } from './session';
+import { CHALLENGE_PATTERN, type SessionStore } from './session';
 import { createStaticHandler } from './static';
 
 /** Request body limits: file contents get 1 MB, everything else 16 KB. */
@@ -25,6 +30,8 @@ export interface Health {
   app: 'term-dashboard';
   version: string;
   pid: number;
+  /** HMAC of `?challenge=` keyed by the instance secret. */
+  proof?: string;
 }
 
 export interface AppDeps {
@@ -38,6 +45,10 @@ export interface AppDeps {
   fileContentRoutes?: readonly RegExp[];
   /** Backend services; without them only health, session and static are served. */
   services?: Services;
+  /** Redirect pages for launch codes; deleted when their code is redeemed. */
+  launchPages?: LaunchPages;
+  /** One line per notable event for td's own terminal (never secrets). */
+  notice?: (line: string) => void;
 }
 
 /** Routes whose bodies carry whole files or long edit lists. */
@@ -97,6 +108,14 @@ export function createApp(deps: AppDeps): Hono {
     );
   });
 
+  // Defence in depth for a page that hosts a shell: never render in a frame.
+  // A full CSP would need a hash for the inline pre-paint script.
+  app.use('*', async (c, next) => {
+    await next();
+    if (c.res.status === 101) return;
+    c.res.headers.set('x-frame-options', 'DENY');
+    c.res.headers.set('content-security-policy', "frame-ancestors 'none'");
+  });
   app.use('*', createGuard(deps.policy, deps.session));
   app.use(
     '/api/*',
@@ -106,13 +125,18 @@ export function createApp(deps: AppDeps): Hono {
     ]),
   );
 
-  app.get('/api/health', (c) =>
-    c.json<Health>({
+  app.get('/api/health', (c) => {
+    const health: Health = {
       app: 'term-dashboard',
       version: deps.version,
       pid: deps.pid,
-    }),
-  );
+    };
+    const challenge = c.req.query('challenge');
+    if (challenge !== undefined && CHALLENGE_PATTERN.test(challenge)) {
+      health.proof = deps.session.instanceProof(challenge);
+    }
+    return c.json<Health>(health);
+  });
 
   app.post('/api/session', async (c) => {
     const code = await stringField(c.req.raw, 'code', 256);
@@ -121,12 +145,37 @@ export function createApp(deps: AppDeps): Hono {
     if (token === null) {
       return c.json({ error: 'invalid or expired launch code' }, 401);
     }
+    await deps.launchPages?.spent(code).catch(() => undefined);
+    deps.notice?.(
+      `td: launch link used; browser session ${deps.session.sessionCount} started (if that was not you, stop td with Ctrl+C)`,
+    );
     return c.json({ token });
   });
 
-  app.post('/api/launch-code', (c) =>
-    c.json({ code: deps.session.mintLaunchCode() }),
-  );
+  app.post('/api/launch-code', async (c) => {
+    let wantPage = false;
+    const text = await c.req.text();
+    if (text.trim() !== '') {
+      try {
+        wantPage = (JSON.parse(text) as { page?: unknown })?.page === true;
+      } catch {
+        return c.json<ApiError>({ error: 'expected a JSON body' }, 400);
+      }
+    }
+    const code = deps.session.mintLaunchCode();
+    const body: LaunchCodeResponse = { code };
+    if (wantPage && deps.launchPages) {
+      const url = launchUrl(`http://${LOOPBACK}:${deps.policy.port()}`, code);
+      try {
+        body.page = await deps.launchPages.create(code, url);
+      } catch (error) {
+        deps.notice?.(
+          `td: could not write a launch page: ${errorMessage(error)}`,
+        );
+      }
+    }
+    return c.json(body);
+  });
 
   const s = deps.services;
   if (s) {

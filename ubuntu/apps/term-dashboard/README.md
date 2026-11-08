@@ -55,8 +55,16 @@ td --help
 
 The launch URL carries a single-use code that expires after 60 seconds. If it
 expires, run `td` again: when td is already running, the second `td` asks it
-for a new code, prints the URL, opens it and exits 0 without starting another
-server. Without `DISPLAY` or `WAYLAND_DISPLAY`, td only prints the URL.
+for a new code, prints the URL, opens the browser and exits 0 without starting
+another server. Without `DISPLAY` or `WAYLAND_DISPLAY`, or with `--no-open`,
+td only prints the URL in your terminal.
+
+To open the browser, td writes a small private page
+(`$XDG_RUNTIME_DIR/term-dashboard/launch-*.html`, mode 0600, or the same name
+under `~/.local/state/term-dashboard/` without `XDG_RUNTIME_DIR`) that
+forwards to the launch URL, and opens that file. The page is deleted as soon
+as its code is used or expires. If your browser cannot read that folder (some
+sandboxed browser packages cannot), open the printed URL yourself.
 
 Exit codes: `0` success, `1` error, `2` usage error, and `129`, `130` or `143`
 after SIGHUP, SIGINT or SIGTERM. Stopping td by any of these signals ends every
@@ -73,16 +81,31 @@ reversible.
 
 - **Loopback only.** The server binds `127.0.0.1` and nothing else. There is no
   option to listen on another interface.
-- **Session token.** Every API call and the terminal WebSocket need a per-run
-  256-bit token. The token never appears in a URL or in a process argument
-  list: the browser gets it by redeeming the single-use launch code from the
-  URL fragment (`#c=...`). A second `td` reads a separate instance secret from
+- **Session tokens.** Every API call and the terminal WebSocket need a
+  256-bit session token. The browser gets one by redeeming the single-use
+  launch code from the URL fragment (`#c=...`); every redemption gets its own
+  token, and all tokens end when td stops. td prints one line on its terminal
+  each time a code is used, so a session you did not start is visible; stop
+  td with Ctrl+C if you see one.
+- **No secrets in process arguments.** Every local user can read the
+  argument lists of all processes (`/proc/<pid>/cmdline`), so neither the
+  token nor the launch code is ever passed to another program: the browser is
+  opened on the private 0600 launch page described above. The URL with the
+  code is printed only to td's own terminal.
+- **Second start.** A second `td` reads a separate instance secret from
   `$XDG_RUNTIME_DIR/term-dashboard/instance.json` (mode 0600) to mint new
-  codes.
+  codes. Before it sends the secret, the running instance must prove it knows
+  that secret (an HMAC of a fresh challenge) and its pid must be one of your
+  processes; otherwise the file is treated as stale and a new server starts.
 - **Host and Origin checks.** Requests whose `Host` is not
   `127.0.0.1:<port>` or `localhost:<port>` get 403 (DNS rebinding), and so do
   cross-origin API calls and WebSocket upgrades. File saves are limited to
   1 MB, terminal messages to 64 KB, and at most 4 terminals run at once.
+  Every response forbids framing (`X-Frame-Options: DENY`,
+  `Content-Security-Policy: frame-ancestors 'none'`).
+- **Bounded memory.** When the browser cannot keep up with a terminal (for
+  example `yes`), td stops reading its output until the browser catches up,
+  so the program waits instead of td's memory growing.
 - **No root.** td refuses to start its server as root.
 - **Allowlisted files.** The browser names files by id, never by path. td
   writes only `~/.bashrc`, `~/.bash_profile`, `~/.bash_aliases`, `~/.profile`,
@@ -93,14 +116,25 @@ reversible.
   oh-my-zsh theme and plugins, a `term-dashboard-omz` block right above
   `source $ZSH/oh-my-zsh.sh`). Everything else in the file is kept as is.
 - **Check, diff, backup, atomic write.** Each save shows a diff first. The
-  candidate is checked with `bash -n`, `zsh -n` or
-  `ghostty +validate-config`, and a failed check writes nothing. Then the
-  current file is copied to a timestamped backup, and the new content replaces
-  it atomically with the same mode. A file changed on disk since it was loaded
-  is never overwritten (the dashboard asks you to reload).
+  candidate is checked with `bash -n`, `zsh -n`, `sh -n` (for `~/.profile`,
+  which `/bin/sh` reads at login) or `ghostty +validate-config`, and a failed
+  check writes nothing. Then the current file is copied to a timestamped
+  backup, and the new content replaces it atomically with the same mode. A
+  file changed on disk since it was loaded is never overwritten (the
+  dashboard asks you to reload), and saves to the same file from two tabs
+  run one after the other, so one of them is told to reload. A Ghostty save
+  that touches both files checks both first; if writing the second fails, the
+  first is put back from its backup.
+- **Only UTF-8 is edited.** A file that is not valid UTF-8 is shown read-only
+  with the reason, and td refuses to save it or restore a backup that is not
+  UTF-8, so no byte is ever replaced. Edit such files in a text editor.
 - **gsettings, never dconf.** Terminal settings go through `gsettings` only.
-  Before the first change of each run, td saves a JSON backup of every
-  installed terminal's settings.
+  Before the first change of each run, and again right before every restore,
+  td saves a JSON backup of every installed terminal's settings.
+- **The activity panel shows what td ran.** It lists every command td runs
+  with its output, including syntax-check messages, which can quote a line of
+  your rc file. It stays in td's memory and in the authenticated browser
+  only.
 
 ## Backups and restore
 
@@ -111,9 +145,11 @@ Backups live in `~/.local/state/term-dashboard/backups/` (or
 - **In the dashboard:** the Backups page lists every file backup (newest
   first) and every gsettings backup. Restoring a file shows the diff and takes
   a new backup of the current content first. Restoring a gsettings backup
-  resets the terminal's settings to the saved values and removes profiles
-  created after it. The Ptyxis and GNOME Terminal pages also have "Restore
-  backup".
+  first saves the current settings as a new backup (so the restore can be
+  undone by restoring that one), then resets the terminal's settings to the
+  saved values and removes profiles created after it. If some keys cannot be
+  set, td sets the rest and lists the failed keys. The Ptyxis and GNOME
+  Terminal pages also have "Restore backup".
 - **By hand:** a file backup is a plain copy named after its file id, so
   restoring is a copy, for example:
 
