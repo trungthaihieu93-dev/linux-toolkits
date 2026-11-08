@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Config pages: Ghostty, Ptyxis/GNOME, shells"
-status: pending
+status: completed
 priority: P1
 effort: "8h"
 dependencies: [3, 4]
