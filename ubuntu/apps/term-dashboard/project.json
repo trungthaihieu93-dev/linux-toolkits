@@ -1,0 +1,79 @@
+{
+  "name": "term-dashboard",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/term-dashboard/src",
+  "projectType": "application",
+  "tags": [],
+  "implicitDependencies": ["term-dashboard-web"],
+  "targets": {
+    "bundle": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "defaultConfiguration": "production",
+      "options": {
+        "platform": "node",
+        "outputPath": "dist/apps/term-dashboard",
+        "format": ["esm"],
+        "bundle": true,
+        "thirdParty": true,
+        "generatePackageJson": false,
+        "main": "apps/term-dashboard/src/main.ts",
+        "tsConfig": "apps/term-dashboard/tsconfig.app.json",
+        "assets": [
+          {
+            "input": "apps/term-dashboard",
+            "glob": "package.json",
+            "output": "."
+          },
+          {
+            "input": "apps/term-dashboard",
+            "glob": "README.md",
+            "output": "."
+          },
+          {
+            "input": "apps/term-dashboard",
+            "glob": "LICENSE",
+            "output": "."
+          }
+        ],
+        "esbuildOptions": {
+          "target": "node22",
+          "sourcemap": false,
+          "outExtension": {
+            ".js": ".js"
+          },
+          "banner": {
+            "js": "#!/usr/bin/env node\nimport { createRequire as __ltCreateRequire } from 'node:module';\nconst require = __ltCreateRequire(import.meta.url);"
+          }
+        }
+      },
+      "configurations": {
+        "development": {},
+        "production": {
+          "minify": true
+        }
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["bundle", "^build"],
+      "cache": true,
+      "inputs": ["production", "^production"],
+      "outputs": ["{workspaceRoot}/dist/apps/term-dashboard"],
+      "options": {
+        "commands": [
+          "rm -rf dist/apps/term-dashboard/web && cp -R dist/apps/term-dashboard-web dist/apps/term-dashboard/web"
+        ],
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "options": {
+        "command": "bun apps/term-dashboard/src/main.ts --no-open --port 4777 --dev-origin http://localhost:5173",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}
