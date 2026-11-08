@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Web shell, design system and terminal"
-status: pending
+status: completed
 priority: P1
 effort: "6h"
 dependencies: [1, 2]

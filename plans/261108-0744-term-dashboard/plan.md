@@ -72,7 +72,7 @@ td (main.js, Node ESM)                         browser (web/, React 19)
 | 1 | [Workspace scaffold, CLI, server shell and link](./phase-01-scaffold-cli-server-link.md) | Completed | none |
 | 2 | [term-config lib: parsers, codecs, API contract](./phase-02-term-config-lib.md) | Completed | 1 |
 | 3 | [Backend services, activity stream and PTY](./phase-03-backend-services-activity-pty.md) | Pending | 2 |
-| 4 | [Web shell, design system and terminal](./phase-04-web-shell-design-terminal.md) | Pending | 1, 2 (steps 4-5 need 3) |
+| 4 | [Web shell, design system and terminal](./phase-04-web-shell-design-terminal.md) | Completed (live terminal and settings round-trip checks move to phase 5) | 1, 2 (steps 4-5 need 3) |
 | 5 | [Config pages: Ghostty, Ptyxis/GNOME, shells](./phase-05-config-pages.md) | Pending | 3, 4 |
 | 6 | [E2E, CI, docs and release wiring](./phase-06-e2e-ci-docs-release.md) | Pending | 5 |
 
@@ -131,3 +131,4 @@ Report: `plans/reports/red-team-261108-0744-term-dashboard.md`. 14 findings (2 b
 - WebSocket: drop the deprecated `@hono/node-ws` (its peer range is `@hono/node-server ^1`) in favour of the built-in `upgradeWebSocket` of `@hono/node-server` 2 with `ws` as an explicit devDependency; the phase 1 probe showed the built-in path works on Node and Bun.
 - CLI build is `bundle` (esbuild) + `build` (copies the web build into `web/`), because Nx asset copying skips gitignored `dist` paths.
 - Ghostty schema: 211 distinct keys (629 key lines). Success criteria refer to every distinct key.
+- Phase 4 live checks (terminal resize via `tput cols`, tab close ends the shell, theme round trip through `settings.json`) need phase 3 routes and run in phase 5 verification.
