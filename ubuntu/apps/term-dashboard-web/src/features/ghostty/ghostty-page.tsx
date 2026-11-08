@@ -45,6 +45,7 @@ import {
   rawNumberKeys,
   stageChange,
   stageReset,
+  withSavedMtimes,
 } from './ghostty-fields';
 
 /** Ghostty's default `reload_config` binding on Linux. */
@@ -113,19 +114,18 @@ function FileTab({ file }: { file: GhosttyFileView }) {
 
 function GhosttyEditor({
   schema,
-  config,
+  initialConfig,
   themes,
   fonts,
-  reload,
 }: {
   schema: GhosttySchema;
-  config: GhosttyConfigView;
+  initialConfig: GhosttyConfigView;
   themes: string[];
   fonts: string[];
-  reload: () => void;
 }) {
   const api = useApi();
   const toast = useToast();
+  const [config, setConfig] = useState(initialConfig);
   const [staged, setStaged] = useState<Map<string, GhosttyEdit>>(new Map());
   const [saved, setSaved] = useState<GhosttySaveResult | null>(null);
   const flow = useSaveFlow();
@@ -182,8 +182,25 @@ function GhosttyEditor({
           body,
         );
         setSaved(result);
+        // Read the files again before dropping the staged edits, so the form
+        // never shows the values from before the save.
+        let next: GhosttyConfigView;
+        try {
+          next = await api.get<GhosttyConfigView>(API_PATHS.ghosttyConfig);
+        } catch (e) {
+          // The new mtimes still let the next save go through.
+          next = withSavedMtimes(config, result);
+          toast({
+            tone: 'error',
+            title: 'Saved, but the config could not be read again',
+            description:
+              `The form shows the values from before the save; reload the page to see the files. ${
+                e instanceof Error ? describeError(e, 'the Ghostty config') : ''
+              }`.trim(),
+          });
+        }
+        setConfig(next);
         setStaged(new Map());
-        reload();
         toast({
           tone: 'success',
           title: 'Ghostty config saved',
@@ -373,10 +390,9 @@ export function GhosttyPage() {
       ) : (
         <GhosttyEditor
           schema={data.data.schema}
-          config={data.data.config}
+          initialConfig={data.data.config}
           themes={themes.status === 'ready' ? themes.data.names : []}
           fonts={fonts.status === 'ready' ? fonts.data.names : []}
-          reload={data.reload}
         />
       )}
     </PageBody>

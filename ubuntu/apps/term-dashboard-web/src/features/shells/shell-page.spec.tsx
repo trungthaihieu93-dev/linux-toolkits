@@ -5,6 +5,7 @@ import {
   type TerminalInventory,
 } from '@linux-toolchain/term-config';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -229,5 +230,113 @@ describe('ShellPage mode switch', () => {
     );
     await screen.findByRole('textbox', { name: '.bashrc editor' });
     expect(tab('Monaco').getAttribute('data-state')).toBe('active');
+  });
+});
+
+describe('ShellPage after a save', () => {
+  interface Deferred {
+    resolve: (view: ShellFileView) => void;
+  }
+
+  /** First file read answers at once; later reads wait for the test. */
+  function savingApi() {
+    const reads: Deferred[] = [];
+    const posts: { path: string; body: unknown }[] = [];
+    const base = fakeApi();
+    let first = true;
+    const get = (path: string): Promise<unknown> => {
+      if (path !== API_PATHS.shellFile('bash', 'bashrc')) return base.get(path);
+      if (first) {
+        first = false;
+        return Promise.resolve(VIEW);
+      }
+      return new Promise((resolve) => reads.push({ resolve }));
+    };
+    const request = ((method: string, path: string, body?: unknown) => {
+      if (method === 'GET') return get(path);
+      posts.push({ path, body });
+      const content = (body as { content: string }).content;
+      if (path === API_PATHS.shellRaw('bash', 'preview'))
+        return Promise.resolve({
+          fileId: 'bashrc',
+          path: VIEW.path,
+          diff: '+x\n',
+          changed: true,
+          check: { ok: true, argv: [], output: '' },
+          baseMtimeMs: 1000,
+          candidate: content,
+        });
+      if (path === API_PATHS.shellRaw('bash', 'save'))
+        return Promise.resolve({
+          fileId: 'bashrc',
+          path: VIEW.path,
+          mtimeMs: 2000,
+          backup: null,
+          check: { ok: true, argv: [], output: '' },
+        });
+      return Promise.reject(new Error(`unexpected ${method} ${path}`));
+    }) as ApiClient['request'];
+    const api: ApiClient = {
+      ...base,
+      request,
+      get: get as ApiClient['get'],
+    };
+    return { api, reads, posts };
+  }
+
+  it('uses the saved mtime at once and keeps edits typed while the file reloads', async () => {
+    const { api, reads, posts } = savingApi();
+    window.history.replaceState(null, '', '/shells/bash');
+    render(
+      <RouterProvider>
+        <TooltipProvider>
+          <ToastProvider>
+            <ApiContext.Provider value={api}>
+              <ShellDataProvider>
+                <ShellPage shell="bash" />
+              </ShellDataProvider>
+            </ApiContext.Provider>
+          </ToastProvider>
+        </TooltipProvider>
+      </RouterProvider>,
+    );
+    await screen.findByRole('region', { name: 'Aliases' });
+    pressTab('Monaco');
+    const editor = () =>
+      screen.getByRole('textbox', {
+        name: '.bashrc editor',
+        hidden: true,
+      }) as HTMLTextAreaElement;
+    await screen.findByRole('textbox', { name: '.bashrc editor' });
+
+    const saved = `${CONTENT}echo 1\n`;
+    fireEvent.change(editor(), { target: { value: saved } });
+    fireEvent.click(screen.getByRole('button', { name: 'Review and save' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBe(
+        null,
+      ),
+    );
+    await waitFor(() => expect(reads).toHaveLength(1));
+
+    // Typed while the reload is still running: the next save already uses
+    // the mtime of the save, not the one read before it.
+    const typed = `${saved}echo 2\n`;
+    fireEvent.change(editor(), { target: { value: typed } });
+    fireEvent.click(screen.getByRole('button', { name: 'Review and save' }));
+    await waitFor(() => expect(posts).toHaveLength(3));
+    expect(posts[2]).toEqual({
+      path: API_PATHS.shellRaw('bash', 'preview'),
+      body: { fileId: 'bashrc', baseMtimeMs: 2000, content: typed },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    await act(async () => {
+      reads[0].resolve({ ...VIEW, content: saved, mtimeMs: 2000 });
+    });
+    await screen.findByText('1 file with unsaved changes');
+    expect(editor().value).toBe(typed);
   });
 });

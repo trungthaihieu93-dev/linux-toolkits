@@ -1,6 +1,7 @@
 import type {
   GhosttyConfigView,
   GhosttyEdit,
+  GhosttySaveResult,
   GhosttySchema,
   GhosttySchemaKey,
 } from '@linux-toolchain/term-config';
@@ -245,4 +246,19 @@ export function stageReset(
   if (fileValues(config).has(key)) next.set(key, { op: 'unset', key });
   else next.delete(key);
   return next;
+}
+
+/** `config` with the mtimes a save returned, for the next save's base. */
+export function withSavedMtimes(
+  config: GhosttyConfigView,
+  result: GhosttySaveResult,
+): GhosttyConfigView {
+  const mtimes = new Map(result.results.map((r) => [r.fileId, r.mtimeMs]));
+  return {
+    ...config,
+    files: config.files.map((f) => {
+      const mtimeMs = mtimes.get(f.id);
+      return mtimeMs === undefined ? f : { ...f, mtimeMs, exists: true };
+    }),
+  };
 }

@@ -13,7 +13,7 @@ import {
   type ShellName,
 } from '@linux-toolchain/term-config';
 import { RotateCwIcon, TriangleAlertIcon } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useInventory } from '../../app/shell-data';
 import { StatePanel } from '../../components/state-panel';
 import { Badge } from '../../components/ui/badge';
@@ -102,7 +102,12 @@ function useShellFile(shell: ShellName, fileId: FileId) {
     };
   }, [api, shell, fileId, attempt]);
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
-  return { state, reload };
+  /** Show `view` now (built from a save result) until a reload replaces it. */
+  const replace = useCallback(
+    (view: ShellFileView) => setState({ status: 'ready', view }),
+    [],
+  );
+  return { state, reload, replace };
 }
 
 /** bash and zsh files: Config mode (managed blocks) and Monaco mode (whole file). */
@@ -120,17 +125,30 @@ export function ShellPage({ shell }: { shell: ShellName }) {
   const [reveal, setReveal] = useState<{ line: number; nonce: number } | null>(
     null,
   );
-  const { state, reload } = useShellFile(shell, fileId);
+  const { state, reload, replace } = useShellFile(shell, fileId);
   const view = state.status === 'ready' ? state.view : null;
 
   const [model, setModel] = useState<ShellBlockModel | null>(null);
   const [raw, setRaw] = useState<string>('');
 
-  // A freshly loaded file resets both drafts.
+  // A newly loaded view resets a draft only when it still equals the view
+  // it was based on (or the file changed): edits typed while a reload ran
+  // are kept, and stay dirty against the new view.
+  const base = useRef<ShellFileView | null>(null);
   useEffect(() => {
     if (!view) return;
-    setModel(view.model ? normalizeModel(view.model) : null);
-    setRaw(view.content);
+    const prev = base.current;
+    base.current = view;
+    const sameFile = prev?.fileId === view.fileId;
+    const prevModel = prev?.model ? normalizeModel(prev.model) : null;
+    setModel((m) =>
+      !sameFile || same(m, prevModel)
+        ? view.model
+          ? normalizeModel(view.model)
+          : null
+        : m,
+    );
+    setRaw((r) => (!sameFile || r === prev.content ? view.content : r));
   }, [view]);
 
   const catalog = useResource((a) =>
@@ -184,7 +202,25 @@ export function ShellPage({ shell }: { shell: ShellName }) {
   const { invalid, onValidityChange } = useInvalidFields();
   const blocked = problems.length > 0 || invalid.size > 0;
 
-  const afterSave = (result: SaveResult) => {
+  /**
+   * Shows what was written at once (content and the new mtime, so the next
+   * save is not refused as a conflict), then reloads for the parsed parts.
+   */
+  const afterSave = (
+    result: SaveResult,
+    previews: SavePreview[],
+    savedModel: ShellBlockModel | null,
+  ) => {
+    if (view && result.fileId === view.fileId) {
+      const written = previews.find((p) => p.fileId === result.fileId);
+      replace({
+        ...view,
+        exists: true,
+        mtimeMs: result.mtimeMs,
+        content: written?.candidate ?? view.content,
+        model: savedModel ?? view.model,
+      });
+    }
     toast({
       tone: 'success',
       title: `${FILE_NAMES[result.fileId]} saved`,
@@ -213,13 +249,15 @@ export function ShellPage({ shell }: { shell: ShellName }) {
             ),
           ],
         }),
-        apply: async () =>
+        apply: async (previews) =>
           afterSave(
             await api.request<SaveResult>(
               'POST',
               API_PATHS.shellConfig(shell, 'save'),
               body,
             ),
+            previews,
+            model,
           ),
       });
     } else {
@@ -235,13 +273,15 @@ export function ShellPage({ shell }: { shell: ShellName }) {
             ),
           ],
         }),
-        apply: async () =>
+        apply: async (previews) =>
           afterSave(
             await api.request<SaveResult>(
               'POST',
               API_PATHS.shellRaw(shell, 'save'),
               body,
             ),
+            previews,
+            null,
           ),
       });
     }

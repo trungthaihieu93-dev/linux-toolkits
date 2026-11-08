@@ -79,11 +79,11 @@ const INVENTORY: TerminalInventory = {
 interface Fake {
   api: ApiClient;
   calls: { method: string; path: string; body: unknown }[];
-  /** Config views returned by successive GET /api/ghostty/config. */
-  configs: GhosttyConfigView[];
+  /** Successive GET /api/ghostty/config answers (null: the read fails). */
+  configs: (GhosttyConfigView | null)[];
 }
 
-function fakeApi(configs: GhosttyConfigView[]): Fake {
+function fakeApi(configs: (GhosttyConfigView | null)[]): Fake {
   const calls: Fake['calls'] = [];
   const fake: Fake = { api: null as unknown as ApiClient, calls, configs };
   let reads = 0;
@@ -144,7 +144,7 @@ function fakeApi(configs: GhosttyConfigView[]): Fake {
   return fake;
 }
 
-async function mount(configs: GhosttyConfigView[]) {
+async function mount(configs: (GhosttyConfigView | null)[]) {
   const fake = fakeApi(configs);
   window.history.replaceState(null, '', '/ghostty');
   render(
@@ -215,5 +215,54 @@ describe('GhosttyPage invalid values', () => {
     expect(
       screen.getByText('The config holds “big”, which is not a number.'),
     ).toBeTruthy();
+  });
+});
+
+describe('GhosttyPage after a save', () => {
+  async function save() {
+    fireEvent.change(box('font-size'), { target: { value: '16' } });
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Review and save' }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
+    await screen.findByText('Ghostty config saved');
+  }
+
+  it('shows the files read after the save, never the old values', async () => {
+    await mount([
+      config([{ key: 'font-size', value: '12' }], 1),
+      config([{ key: 'font-size', value: '16' }], 2),
+    ]);
+    await save();
+    expect(box('font-size').value).toBe('16');
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).toBe(
+      null,
+    );
+  });
+
+  it('uses the saved mtimes when the files cannot be read again', async () => {
+    const fake = await mount([
+      config([{ key: 'font-size', value: '12' }], 1),
+      null,
+    ]);
+    await save();
+    await screen.findByText('Saved, but the config could not be read again');
+
+    fireEvent.change(box('font-size'), { target: { value: '18' } });
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Review and save' }),
+    );
+    await waitFor(() =>
+      expect(
+        fake.calls.filter((c) => c.path === API_PATHS.ghosttyPreview),
+      ).toHaveLength(2),
+    );
+    const previews = fake.calls.filter(
+      (c) => c.path === API_PATHS.ghosttyPreview,
+    );
+    expect(previews[1].body).toEqual({
+      edits: [{ op: 'set', key: 'font-size', value: '18' }],
+      baseMtimes: { ghostty: 2 },
+    });
   });
 });
