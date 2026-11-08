@@ -149,6 +149,8 @@ async function mount() {
     </ApiContext.Provider>,
   );
   await screen.findByRole('region', { name: 'Terminal' });
+  // The socket opens in an effect that can run after the region is shown.
+  await vi.waitFor(() => expect(sockets).toHaveLength(1));
   return view;
 }
 
