@@ -291,3 +291,96 @@ describe('SchemaField', () => {
     expect(onReset).toHaveBeenCalledOnce();
   });
 });
+
+describe('SchemaField validity', () => {
+  function mountReporting(field: FieldDescriptor, initial: FieldValue) {
+    const reports: boolean[] = [];
+    const changes: FieldValue[] = [];
+    function Harness({ shown }: { shown: boolean }) {
+      const [value, setValue] = useState<FieldValue>(initial);
+      return shown ? (
+        <SchemaField
+          field={field}
+          value={value}
+          onChange={(v) => {
+            changes.push(v);
+            setValue(v);
+          }}
+          onValidityChange={(bad) => reports.push(bad)}
+        />
+      ) : null;
+    }
+    const view = render(<Harness shown />);
+    return {
+      reports,
+      changes,
+      unmount: () => view.rerender(<Harness shown={false} />),
+    };
+  }
+
+  it('reports a number box with invalid text and says why', () => {
+    const { reports, changes } = mountReporting(
+      { id: 'n', label: 'size', kind: 'number', integer: true, max: 100 },
+      10,
+    );
+    expect(reports).toEqual([]);
+    const box = screen.getByRole('spinbutton', { name: 'size' });
+    fireEvent.change(box, { target: { value: '15' } });
+    fireEvent.change(box, { target: { value: '150' } });
+    expect(changes).toEqual([15]);
+    expect(reports).toEqual([true]);
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Enter a whole number of at most 100. This value is not saved.',
+    );
+    fireEvent.change(box, { target: { value: '' } });
+    expect(reports).toEqual([true]);
+    fireEvent.change(box, { target: { value: '99' } });
+    expect(reports).toEqual([true, false]);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('reports either half of a tuple and the hex box', () => {
+    const tuple = mountReporting(
+      {
+        id: 't',
+        label: 'size',
+        kind: 'tuple',
+        integer: true,
+        min: 0,
+        partLabels: ['columns', 'rows'],
+      },
+      [80, 24],
+    );
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'size rows' }), {
+      target: { value: '-1' },
+    });
+    expect(tuple.reports).toEqual([true]);
+    cleanup();
+
+    const color = mountReporting(
+      { id: 'c', label: 'background', kind: 'color' },
+      '#000000',
+    );
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'background hex value' }),
+      { target: { value: '#12' } },
+    );
+    expect(color.reports).toEqual([true]);
+  });
+
+  it('counts a validate error, and reports valid when it unmounts', () => {
+    const { reports, unmount } = mountReporting(
+      {
+        id: 'x',
+        label: 'count',
+        kind: 'text',
+        validate: (v) => (/^\d*$/.test(String(v)) ? null : 'Digits only.'),
+      },
+      '1',
+    );
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: '1a' } });
+    expect(reports).toEqual([true]);
+    unmount();
+    expect(reports).toEqual([true, false]);
+  });
+});

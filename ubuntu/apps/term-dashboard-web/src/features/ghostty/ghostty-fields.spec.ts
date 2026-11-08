@@ -6,6 +6,8 @@ import {
   docSummary,
   ghosttyFields,
   ghosttyFormState,
+  rawNumberErrors,
+  rawNumberKeys,
   stageChange,
   stageReset,
 } from './ghostty-fields';
@@ -151,5 +153,52 @@ describe('ghostty fields', () => {
     expect(state.values['font-size']).toBe(13);
     expect(state.modified.has('font-size')).toBe(false);
     expect(stageReset(new Map(), 'theme', CONFIG).size).toBe(0);
+  });
+});
+
+describe('number keys whose value is not a number', () => {
+  const config: GhosttyConfigView = {
+    ...CONFIG,
+    files: [
+      {
+        ...CONFIG.files[0],
+        entries: [{ key: 'font-size', value: 'big', line: 1 }],
+      },
+    ],
+    effective: {},
+    conflicts: [],
+  };
+
+  it('shows the text from the file, not 0', () => {
+    const raw = rawNumberKeys(SCHEMA, config);
+    expect([...raw]).toEqual([['font-size', 'big']]);
+    expect(
+      ghosttyFormState(SCHEMA, config, new Map()).values['font-size'],
+    ).toBe('big');
+    // A number from the files keeps the number box.
+    expect(rawNumberKeys(SCHEMA, CONFIG).size).toBe(0);
+  });
+
+  it('marks the file value and accepts only a number as an edit', () => {
+    const raw = rawNumberKeys(SCHEMA, config);
+    const field = ghosttyFields(SCHEMA, [], [], raw)[0];
+    expect(field.kind).toBe('text');
+    expect(field.validate?.('big')).toBeNull();
+    expect(field.validate?.('bigger')).toBe('Enter a number.');
+    expect(field.validate?.('15.5')).toBeNull();
+    expect(rawNumberErrors(raw, new Map())).toEqual({
+      'font-size': 'The config holds “big”, which is not a number.',
+    });
+
+    const staged = stageChange(new Map(), SCHEMA.keys[0], '15', config);
+    expect(staged.get('font-size')).toEqual({
+      op: 'set',
+      key: 'font-size',
+      value: '15',
+    });
+    expect(rawNumberErrors(raw, staged)).toEqual({});
+    expect(ghosttyFormState(SCHEMA, config, staged).values['font-size']).toBe(
+      '15',
+    );
   });
 });

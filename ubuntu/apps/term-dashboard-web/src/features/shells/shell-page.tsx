@@ -34,6 +34,10 @@ import { SaveBar } from '../save/save-bar';
 import { SaveReviewDialog } from '../save/save-review-dialog';
 import { useUnsavedChangesGuard } from '../save/unsaved-changes';
 import { useSaveFlow } from '../save/use-save-flow';
+import {
+  INVALID_FIELDS_REASON,
+  useInvalidFields,
+} from '../schema-form/use-invalid-fields';
 import { ShellConfigForm } from './shell-config-form';
 
 export type ShellMode = 'config' | 'monaco';
@@ -176,6 +180,9 @@ export function ShellPage({ shell }: { shell: ShellName }) {
 
   const problems =
     model && effectiveMode === 'config' ? validateShellModel(model, shell) : [];
+  // Fields report invalid text only while Config mode shows them.
+  const { invalid, onValidityChange } = useInvalidFields();
+  const blocked = problems.length > 0 || invalid.size > 0;
 
   const afterSave = (result: SaveResult) => {
     toast({
@@ -349,6 +356,7 @@ export function ShellPage({ shell }: { shell: ShellName }) {
           onChange={(m) => setModel(normalizeModel(m))}
           catalog={catalog.status === 'ready' ? catalog.data : null}
           onEditAtLine={editAtLine}
+          onValidityChange={onValidityChange}
         />
       )}
 
@@ -384,9 +392,13 @@ export function ShellPage({ shell }: { shell: ShellName }) {
         count={dirty ? 1 : 0}
         label="file with unsaved changes"
         busy={flow.previewing}
-        disabled={problems.length > 0}
+        disabled={blocked}
         disabledReason={
-          problems.length > 0 ? 'Fix the problems above to save.' : undefined
+          problems.length > 0
+            ? 'Fix the problems above to save.'
+            : invalid.size > 0
+              ? INVALID_FIELDS_REASON
+              : undefined
         }
         onDiscard={() => guard.confirmDiscard(resetDrafts)}
         onReview={review}

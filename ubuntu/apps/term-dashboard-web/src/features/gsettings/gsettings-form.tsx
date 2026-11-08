@@ -41,6 +41,18 @@ export function GSettingsForm({
   const loaded = useResource((a) => a.get<GSettingsSchemaView>(path));
   const [view, setView] = useState<GSettingsSchemaView | null>(null);
   const [drafts, setDrafts] = useState<Record<string, FieldValue>>({});
+  // Mirrors `drafts` for callbacks that run outside a render.
+  const draftsRef = useRef<Record<string, FieldValue>>({});
+  const updateDrafts = (
+    change: (d: Record<string, FieldValue>) => Record<string, FieldValue>,
+  ) => {
+    draftsRef.current = change(draftsRef.current);
+    setDrafts(draftsRef.current);
+  };
+  // Keys whose box shows text that is not a valid value: nothing is written
+  // for them until the text is valid again.
+  const invalid = useRef(new Set<string>());
+  const [revisions, setRevisions] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [writeState, setWriteState] = useState<WriteState>('idle');
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -103,7 +115,7 @@ export function GSettingsForm({
       setView(next);
       setErrors((x) => ({ ...x, [key]: undefined }));
       // Keep a newer draft typed while this write was running.
-      setDrafts((d) => {
+      updateDrafts((d) => {
         if (!(key in d) || !sameValue(d[key], value)) return d;
         const rest = { ...d };
         delete rest[key];
@@ -126,10 +138,17 @@ export function GSettingsForm({
   const writeRef = useRef(write);
   writeRef.current = write;
 
+  const cancel = (key: string) => {
+    const t = timers.current.get(key);
+    if (t) clearTimeout(t);
+    timers.current.delete(key);
+    pending.current.delete(key);
+  };
+
   const schedule = (key: string, value: FieldValue) => {
-    setDrafts((d) => ({ ...d, [key]: value }));
-    const old = timers.current.get(key);
-    if (old) clearTimeout(old);
+    updateDrafts((d) => ({ ...d, [key]: value }));
+    cancel(key);
+    if (invalid.current.has(key)) return;
     const run = () => {
       timers.current.delete(key);
       pending.current.delete(key);
@@ -148,11 +167,25 @@ export function GSettingsForm({
     [],
   );
 
+  // A box turning invalid drops its waiting write (it would store the last
+  // valid number, not what the box shows); turning valid writes the draft.
+  const onValidityChange = (key: string, bad: boolean) => {
+    if (bad) {
+      invalid.current.add(key);
+      cancel(key);
+      return;
+    }
+    if (!invalid.current.delete(key)) return;
+    const d = draftsRef.current;
+    if (key in d) schedule(key, d[key]);
+  };
+
   const reset = (key: string) => {
-    const t = timers.current.get(key);
-    if (t) clearTimeout(t);
-    timers.current.delete(key);
-    pending.current.delete(key);
+    cancel(key);
+    // Remount the field so text typed into it goes, even when the reset
+    // value equals the last valid one.
+    invalid.current.delete(key);
+    setRevisions((r) => ({ ...r, [key]: (r[key] ?? 0) + 1 }));
     enqueue(() => resetNow(key));
   };
 
@@ -165,7 +198,7 @@ export function GSettingsForm({
         { key },
       );
       setView(next);
-      setDrafts((d) => {
+      updateDrafts((d) => {
         const rest = { ...d };
         delete rest[key];
         return rest;
@@ -228,6 +261,8 @@ export function GSettingsForm({
         isModified={(id) => id in drafts || isDefault.get(id) === false}
         onChange={schedule}
         onReset={reset}
+        onValidityChange={onValidityChange}
+        revisions={revisions}
         errors={errors}
       />
     </div>

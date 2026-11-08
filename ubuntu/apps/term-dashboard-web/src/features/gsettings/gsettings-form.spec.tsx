@@ -33,7 +33,14 @@ function schema(values: Record<string, string>): GSettingsSchemaView {
     path: null,
     keys: Object.entries(values).map(([name, value]) =>
       name === 'size'
-        ? key({ name, type: 'i', value, default: '10', isDefault: false })
+        ? key({
+            name,
+            type: 'i',
+            value,
+            default: '10',
+            isDefault: value === '10',
+            range: { min: 0, max: 100 },
+          })
         : key({ name, value, isDefault: value === "''" }),
     ),
   };
@@ -90,6 +97,20 @@ const pause = () =>
   });
 const settle = () => act(async () => undefined);
 
+beforeAll(() => {
+  // jsdom lacks these; the radix Slider of a range key calls them.
+  globalThis.ResizeObserver ??= class {
+    observe() {
+      return undefined;
+    }
+    unobserve() {
+      return undefined;
+    }
+    disconnect() {
+      return undefined;
+    }
+  } as unknown as typeof ResizeObserver;
+});
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   cleanup();
@@ -138,5 +159,54 @@ describe('GSettingsForm write ordering', () => {
     await settle();
     expect(box('a').value).toBe('a1');
     expect(box('b').value).toBe('');
+  });
+});
+
+describe('GSettingsForm invalid number text', () => {
+  const sizeBox = () =>
+    screen.getByRole('spinbutton', { name: 'size value' }) as HTMLInputElement;
+  const typeSize = (value: string) =>
+    fireEvent.change(sizeBox(), { target: { value } });
+
+  it('drops the waiting write when the box turns invalid', async () => {
+    const { calls } = await mount(schema({ size: '10' }));
+    typeSize('15');
+    typeSize('150');
+    await pause();
+    await pause();
+    expect(calls).toEqual([]);
+    expect(sizeBox().value).toBe('150');
+    expect(sizeBox().getAttribute('aria-invalid')).toBe('true');
+
+    typeSize('');
+    await pause();
+    expect(calls).toEqual([]);
+
+    typeSize('50');
+    await pause();
+    expect(calls.map((c) => c.body)).toEqual([{ key: 'size', value: '50' }]);
+  });
+
+  it('writes nothing for an invalid box when the page closes', async () => {
+    const { calls } = await mount(schema({ size: '10' }));
+    typeSize('15');
+    typeSize('150');
+    cleanup();
+    await settle();
+    expect(calls).toEqual([]);
+  });
+
+  it('a reset clears the invalid text even when the value stays the same', async () => {
+    const { calls } = await mount(schema({ size: '20' }));
+    typeSize('200');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reset size to default' }),
+    );
+    await settle();
+    expect(sizeBox().value).toBe('20');
+    expect(sizeBox().getAttribute('aria-invalid')).toBeNull();
+    expect(calls.map((c) => [c.method, c.body])).toEqual([
+      ['POST', { key: 'size' }],
+    ]);
   });
 });

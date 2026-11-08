@@ -23,10 +23,15 @@ export function docSummary(doc: string, max = 180): string {
   return sentence.length > max ? `${sentence.slice(0, max - 1)}…` : sentence;
 }
 
+const isNumberText = (text: string) =>
+  text.trim() !== '' && Number.isFinite(Number(text));
+
 export function ghosttyFields(
   schema: GhosttySchema,
   themes: string[],
   fonts: string[],
+  /** From `rawNumberKeys`: number keys shown as text. */
+  rawNumbers: ReadonlyMap<string, string> = new Map(),
 ): FieldDescriptor[] {
   return schema.keys.map((k) => {
     const base = {
@@ -36,6 +41,19 @@ export function ghosttyFields(
       summary: k.doc ? docSummary(k.doc) : undefined,
       doc: k.doc || undefined,
     };
+    const raw = rawNumbers.get(k.key);
+    if (raw !== undefined) {
+      // The text from the file stays as it is (the page marks it); an edit
+      // must be a number before it can be saved.
+      return {
+        ...base,
+        kind: 'text',
+        validate: (v) =>
+          String(v) === raw || isNumberText(String(v))
+            ? null
+            : 'Enter a number.',
+      } satisfies FieldDescriptor;
+    }
     if (k.repeatable) {
       return {
         ...base,
@@ -94,6 +112,40 @@ function scalarText(
   return files.get(k.key)?.at(-1) ?? config.effective[k.key]?.[0] ?? k.default;
 }
 
+/**
+ * Number keys whose current text is not a number (`font-size = big`). They
+ * are shown as that text instead of a number box, which would show 0. Maps
+ * key to the text.
+ */
+export function rawNumberKeys(
+  schema: GhosttySchema,
+  config: GhosttyConfigView,
+): Map<string, string> {
+  const files = fileValues(config);
+  const out = new Map<string, string>();
+  for (const k of schema.keys) {
+    if (k.repeatable || k.control !== 'number') continue;
+    const text = scalarText(k, config, files, undefined);
+    // An empty default means "unset"; it is not a value from a file.
+    if (!isNumberText(text) && (files.has(k.key) || text !== ''))
+      out.set(k.key, text);
+  }
+  return out;
+}
+
+/** What the page shows next to a raw number key that is not edited. */
+export function rawNumberErrors(
+  raw: ReadonlyMap<string, string>,
+  staged: ReadonlyMap<string, GhosttyEdit>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, text] of raw) {
+    if (!staged.has(key))
+      out[key] = `The config holds “${text}”, which is not a number.`;
+  }
+  return out;
+}
+
 export function toFieldValue(k: GhosttySchemaKey, text: string): FieldValue {
   if (k.control === 'bool') return text === 'true';
   if (k.control === 'number') {
@@ -133,6 +185,7 @@ export function ghosttyFormState(
   staged: ReadonlyMap<string, GhosttyEdit>,
 ): GhosttyFormState {
   const files = fileValues(config);
+  const raw = rawNumberKeys(schema, config);
   const values: Record<string, FieldValue> = {};
   const modified = new Set<string>();
   for (const k of schema.keys) {
@@ -143,7 +196,7 @@ export function ghosttyFormState(
       if (list.length > 0) modified.add(k.key);
     } else {
       const text = scalarText(k, config, files, edit);
-      values[k.key] = toFieldValue(k, text);
+      values[k.key] = raw.has(k.key) ? text : toFieldValue(k, text);
       // Modified = the files (or a staged edit) set a non-default value; a
       // value that only comes from a theme or include is not.
       const set = edit ? edit.op === 'set' : files.has(k.key);

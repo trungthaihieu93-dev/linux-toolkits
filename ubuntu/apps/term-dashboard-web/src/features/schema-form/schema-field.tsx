@@ -5,7 +5,14 @@ import {
   RotateCcwIcon,
   Trash2Icon,
 } from 'lucide-react';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -44,6 +51,21 @@ function asNumber(v: FieldValue): number {
   return typeof v === 'number' ? v : Number(v);
 }
 
+/** The rule a number box breaks, shown while its text is invalid. */
+export function numberRule(field: FieldDescriptor): string {
+  const what = field.integer ? 'a whole number' : 'a number';
+  const { min, max } = field;
+  const range =
+    min !== undefined && max !== undefined
+      ? ` from ${min} to ${max}`
+      : min !== undefined
+        ? ` of at least ${min}`
+        : max !== undefined
+          ? ` of at most ${max}`
+          : '';
+  return `Enter ${what}${range}. This value is not saved.`;
+}
+
 interface NumberInputProps {
   id?: string;
   value: number;
@@ -56,9 +78,39 @@ interface NumberInputProps {
   disabled?: boolean;
   className?: string;
   describedBy?: string;
+  /** Called when the typed text turns invalid or valid again. */
+  onValidityChange?: (invalid: boolean) => void;
 }
 
-/** A number box that keeps what is typed and reports only valid numbers. */
+/** Calls `report` whenever `invalid` changes (not on mount when valid). */
+function useReportValidity(
+  invalid: boolean,
+  report: ((invalid: boolean) => void) | undefined,
+): void {
+  const reportRef = useRef(report);
+  reportRef.current = report;
+  const last = useRef(false);
+  useEffect(() => {
+    if (invalid === last.current) return;
+    last.current = invalid;
+    reportRef.current?.(invalid);
+  }, [invalid]);
+  // An unmounted control shows nothing invalid any more.
+  useEffect(
+    () => () => {
+      if (!last.current) return;
+      last.current = false;
+      reportRef.current?.(false);
+    },
+    [],
+  );
+}
+
+/**
+ * A number box that keeps what is typed and reports only valid numbers.
+ * Invalid text is reported through `onValidityChange`, so the page can hold
+ * writes and saves while the box shows something it cannot store.
+ */
 export function NumberInput({
   id,
   value,
@@ -71,6 +123,7 @@ export function NumberInput({
   disabled,
   className,
   describedBy,
+  onValidityChange,
 }: NumberInputProps) {
   const [text, setText] = useState(() => String(value));
   useEffect(() => {
@@ -83,6 +136,7 @@ export function NumberInput({
     (integer && !Number.isInteger(n)) ||
     (min !== undefined && n < min) ||
     (max !== undefined && n > max);
+  useReportValidity(Boolean(invalid), onValidityChange);
   return (
     <Input
       id={id}
@@ -305,6 +359,7 @@ function ColorControl({
   onChange,
   disabled,
   describedBy,
+  onValidityChange,
 }: {
   id: string;
   field: FieldDescriptor;
@@ -312,10 +367,12 @@ function ColorControl({
   onChange: (v: string) => void;
   disabled?: boolean;
   describedBy?: string;
+  onValidityChange?: (invalid: boolean) => void;
 }) {
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   const valid = text === '' || HEX_COLOR.test(text);
+  useReportValidity(!valid, onValidityChange);
   const hex = HEX_COLOR.test(text)
     ? `#${text.replace(/^#/, '').toLowerCase()}`
     : null;
@@ -365,6 +422,12 @@ export interface SchemaFieldProps {
   error?: string | null;
   /** Extra content under the control (e.g. "set in config"). */
   note?: ReactNode;
+  /**
+   * Called when the field starts or stops showing an invalid value (typed
+   * text that is not stored in `value`, or a `validate` error). Pages hold
+   * writes and saves while any field is invalid.
+   */
+  onValidityChange?: (invalid: boolean) => void;
 }
 
 /** One setting: label, help, the control for its kind, badge and reset. */
@@ -377,13 +440,25 @@ export function SchemaField({
   disabled,
   error,
   note,
+  onValidityChange,
 }: SchemaFieldProps) {
   const baseId = useId();
   const controlId = `${baseId}-control`;
   const helpId = `${baseId}-help`;
   const errorId = `${baseId}-error`;
   const ownError = field.validate?.(value) ?? null;
-  const shownError = error ?? ownError;
+  const [badParts, setBadParts] = useState<Record<string, boolean>>({});
+  const partValidity = useCallback(
+    (part: string) => (invalid: boolean) =>
+      setBadParts((p) => (p[part] === invalid ? p : { ...p, [part]: invalid })),
+    [],
+  );
+  const partsInvalid = Object.values(badParts).some(Boolean);
+  useReportValidity(ownError !== null || partsInvalid, onValidityChange);
+  // The colour box shows its own hint next to the input.
+  const partError =
+    partsInvalid && field.kind !== 'color' ? numberRule(field) : null;
+  const shownError = error ?? ownError ?? partError;
   const describedBy =
     [field.summary ? helpId : null, shownError ? errorId : null]
       .filter(Boolean)
@@ -468,6 +543,7 @@ export function SchemaField({
             disabled={disabled}
             describedBy={describedBy}
             onChange={onChange}
+            onValidityChange={partValidity('value')}
             className="w-28"
           />
         </div>
@@ -487,6 +563,7 @@ export function SchemaField({
           disabled={disabled}
           describedBy={describedBy}
           onChange={onChange}
+          onValidityChange={partValidity('value')}
           className="sm:max-w-40"
         />
       );
@@ -500,6 +577,7 @@ export function SchemaField({
           disabled={disabled}
           describedBy={describedBy}
           onChange={onChange}
+          onValidityChange={partValidity('value')}
         />
       );
       break;
@@ -552,6 +630,7 @@ export function SchemaField({
             disabled={disabled}
             describedBy={describedBy}
             onChange={(n) => onChange([n, b])}
+            onValidityChange={partValidity('first')}
             className="w-28"
           />
           <span aria-hidden className="text-muted-foreground">
@@ -565,6 +644,7 @@ export function SchemaField({
             max={field.max}
             disabled={disabled}
             onChange={(n) => onChange([a, n])}
+            onValidityChange={partValidity('second')}
             className="w-28"
           />
         </div>
