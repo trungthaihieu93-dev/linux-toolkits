@@ -17,6 +17,7 @@ import {
   type GSchema,
   type GSchemaKey,
   type GSettingsBackupRef,
+  type GSettingsRestoreResult,
   type GSettingsSchemaView,
   type GSettingsTerminalInfo,
   type GSettingsTerminalSchemas,
@@ -26,10 +27,11 @@ import {
 } from '@linux-toolchain/term-config';
 import {
   badRequest,
-  conflict,
   errorMessage,
+  HttpError,
   notFound,
   unavailable,
+  unprocessable,
 } from '../errors';
 import {
   failureText,
@@ -39,6 +41,7 @@ import {
 } from '../exec/command-runner';
 import type { FileStore } from '../files/file-store';
 import { findExecutable, type Dirs, type Env } from '../system/environment';
+import { KeyedMutex } from '../system/keyed-mutex';
 
 /** Static facts about each gsettings-configured terminal. */
 interface TerminalDef {
@@ -176,6 +179,12 @@ export class GSettingsService {
     Promise<string | null>
   >();
   private backupDone: Promise<GSettingsBackupRef | null> | null = null;
+  /**
+   * One lock per terminal kind around every change, so read-modify-write of
+   * the profile list cannot lose an entry and a set followed by its view
+   * answers in the order the writes happened.
+   */
+  private readonly locks = new KeyedMutex();
 
   constructor(
     private readonly runner: CommandRunner,
@@ -396,7 +405,29 @@ export class GSettingsService {
     return r.schema.keys.find((k) => k.name === key) as GSchemaKey;
   }
 
-  async set(
+  set(
+    kind: TerminalKind,
+    target: SchemaTarget,
+    key: unknown,
+    value: unknown,
+  ): Promise<void> {
+    return this.locks.run(kind, () => this.setLocked(kind, target, key, value));
+  }
+
+  /** Set a key and return the schema view as of that write. */
+  setAndView(
+    kind: TerminalKind,
+    target: SchemaTarget,
+    key: unknown,
+    value: unknown,
+  ): Promise<GSettingsSchemaView> {
+    return this.locks.run(kind, async () => {
+      await this.setLocked(kind, target, key, value);
+      return this.view(kind, target);
+    });
+  }
+
+  private async setLocked(
     kind: TerminalKind,
     target: SchemaTarget,
     key: unknown,
@@ -417,7 +448,23 @@ export class GSettingsService {
     await this.gsettings(['set', r.arg, k.name, value]);
   }
 
-  async reset(
+  reset(kind: TerminalKind, target: SchemaTarget, key: unknown): Promise<void> {
+    return this.locks.run(kind, () => this.resetLocked(kind, target, key));
+  }
+
+  /** Reset a key and return the schema view as of that write. */
+  resetAndView(
+    kind: TerminalKind,
+    target: SchemaTarget,
+    key: unknown,
+  ): Promise<GSettingsSchemaView> {
+    return this.locks.run(kind, async () => {
+      await this.resetLocked(kind, target, key);
+      return this.view(kind, target);
+    });
+  }
+
+  private async resetLocked(
     kind: TerminalKind,
     target: SchemaTarget,
     key: unknown,
@@ -502,7 +549,14 @@ export class GSettingsService {
     return { kind, defaultUuid, profiles };
   }
 
-  async createProfile(kind: TerminalKind, label: unknown): Promise<string> {
+  createProfile(kind: TerminalKind, label: unknown): Promise<string> {
+    return this.locks.run(kind, () => this.createProfileLocked(kind, label));
+  }
+
+  private async createProfileLocked(
+    kind: TerminalKind,
+    label: unknown,
+  ): Promise<string> {
     const text = checkLabel(label);
     const { uuids } = await this.readList(kind);
     const uuid = TERMINALS[kind].newUuid();
@@ -519,7 +573,17 @@ export class GSettingsService {
   }
 
   /** Copy every non-default key of `uuid` into a new profile. */
-  async duplicateProfile(
+  duplicateProfile(
+    kind: TerminalKind,
+    uuid: string,
+    label?: unknown,
+  ): Promise<string> {
+    return this.locks.run(kind, () =>
+      this.duplicateProfileLocked(kind, uuid, label),
+    );
+  }
+
+  private async duplicateProfileLocked(
     kind: TerminalKind,
     uuid: string,
     label?: unknown,
@@ -559,13 +623,22 @@ export class GSettingsService {
   }
 
   /** Remove from the list, then reset every key at the profile's path. Never the default. */
-  async deleteProfile(kind: TerminalKind, uuid: string): Promise<void> {
+  deleteProfile(kind: TerminalKind, uuid: string): Promise<void> {
+    return this.locks.run(kind, () => this.deleteProfileLocked(kind, uuid));
+  }
+
+  private async deleteProfileLocked(
+    kind: TerminalKind,
+    uuid: string,
+  ): Promise<void> {
     const r = await this.resolve(kind, { part: 'profile', uuid });
     const { uuids, defaultUuid } = await this.readList(kind);
     if (!uuids.includes(uuid))
       throw notFound(`no ${TERMINALS[kind].label} profile ${uuid}`);
     if (uuid === defaultUuid)
-      throw conflict('the default profile cannot be deleted');
+      throw unprocessable(
+        'the default profile cannot be deleted; make another profile the default first',
+      );
     await this.ensureBackup();
     await this.writeList(
       kind,
@@ -574,7 +647,14 @@ export class GSettingsService {
     await this.gsettings(['reset-recursively', r.arg]);
   }
 
-  async setDefaultProfile(kind: TerminalKind, uuid: string): Promise<void> {
+  setDefaultProfile(kind: TerminalKind, uuid: string): Promise<void> {
+    return this.locks.run(kind, () => this.setDefaultProfileLocked(kind, uuid));
+  }
+
+  private async setDefaultProfileLocked(
+    kind: TerminalKind,
+    uuid: string,
+  ): Promise<void> {
     await this.resolve(kind, { part: 'profile', uuid });
     await this.requireProfile(kind, uuid);
     const schemas = await this.requireSchemas(kind);
@@ -725,9 +805,18 @@ export class GSettingsService {
 
   /**
    * For each saved terminal: reset profiles created after the backup, reset
-   * every saved schema/path, then set every saved key.
+   * every saved schema/path, then set every saved key. A fresh backup of the
+   * current settings is always taken first, so a restore can be undone. A
+   * step that fails does not stop the others; the error then names every
+   * failed step and the pre-restore backup.
    */
-  async restore(ts: BackupTimestamp): Promise<TerminalKind[]> {
+  restore(ts: BackupTimestamp): Promise<GSettingsRestoreResult> {
+    return this.locks.runAll(TERMINAL_KINDS, () => this.restoreLocked(ts));
+  }
+
+  private async restoreLocked(
+    ts: BackupTimestamp,
+  ): Promise<GSettingsRestoreResult> {
     if (!isBackupTimestamp(ts)) throw badRequest('invalid backup timestamp');
     const path = join(this.files.backupsDir, ts, GSETTINGS_BACKUP_NAME);
     let text: string;
@@ -796,18 +885,42 @@ export class GSettingsService {
         );
       plan.push({ kind: t.kind, extra, entries });
     }
-    await this.ensureBackup();
+    let backup: GSettingsBackupRef | null;
+    try {
+      backup = await this.backup();
+    } catch (error) {
+      throw new Error(
+        `gsettings backup failed, nothing was restored: ${errorMessage(error)}`,
+      );
+    }
+    this.backupDone ??= Promise.resolve(backup);
+    const failed: string[] = [];
+    const step = async (argv: string[], what: string) => {
+      try {
+        await this.gsettings(argv);
+      } catch (error) {
+        const why =
+          error instanceof HttpError && error.detail
+            ? error.detail.trim()
+            : errorMessage(error);
+        failed.push(`${what}: ${why}`);
+      }
+    };
     for (const p of plan) {
-      for (const r of p.extra)
-        await this.gsettings(['reset-recursively', r.arg]);
-      for (const { r } of p.entries)
-        await this.gsettings(['reset-recursively', r.arg]);
+      for (const r of [...p.extra, ...p.entries.map((e) => e.r)])
+        await step(['reset-recursively', r.arg], `reset ${r.arg}`);
       for (const { r, values } of p.entries) {
         for (const [k, value] of values)
-          await this.gsettings(['set', r.arg, k.name, value]);
+          await step(['set', r.arg, k.name, value], `${r.arg} ${k.name}`);
       }
     }
-    return plan.map((p) => p.kind);
+    if (failed.length > 0) {
+      throw unprocessable(
+        `restoring ${ts} partly failed (${failed.length} step(s)); the settings from right before the restore are in backup ${backup?.ts ?? '(none)'}`,
+        failed.join('\n'),
+      );
+    }
+    return { restored: plan.map((p) => p.kind), backup };
   }
 }
 

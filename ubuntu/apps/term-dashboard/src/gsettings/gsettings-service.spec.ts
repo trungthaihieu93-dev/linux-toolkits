@@ -249,7 +249,7 @@ describe('GSettingsService', () => {
     expect(view.defaultUuid).toBe(DEFAULT_UUID);
 
     expect(await status(service.deleteProfile('ptyxis', DEFAULT_UUID))).toBe(
-      409,
+      422,
     );
     await service.deleteProfile('ptyxis', OTHER_UUID);
     expect(runner.commands()).toContain(
@@ -277,7 +277,7 @@ describe('GSettingsService', () => {
     );
 
     const restored = await service.restore(backup?.ts as string);
-    expect(restored).toEqual(['ptyxis']);
+    expect(restored.restored).toEqual(['ptyxis']);
     const global = fake.store.get('/org/gnome/Ptyxis/');
     expect(global?.get('audible-bell')).toBeUndefined();
     expect(global?.get('profile-uuids')).toBe(
@@ -292,6 +292,81 @@ describe('GSettingsService', () => {
       0,
     );
     expect(await status(service.restore('20200101T000000Z'))).toBe(404);
+  });
+
+  it('backs up the current state before every restore, so a restore can be undone', async () => {
+    const first = await service.ensureBackup();
+    await service.set('ptyxis', { part: 'global' }, 'audible-bell', 'false');
+    const result = await service.restore(first?.ts as string);
+    expect(result.backup?.ts).not.toBe(first?.ts);
+    const undo = JSON.parse(
+      await readFile(result.backup?.path as string, 'utf8'),
+    );
+    const globalEntry = undo.terminals[0].entries.find(
+      (e: { schema: string }) => e.schema === 'org.gnome.Ptyxis',
+    );
+    expect(globalEntry.values['audible-bell']).toBe('false');
+    expect(
+      fake.store.get('/org/gnome/Ptyxis/')?.get('audible-bell'),
+    ).toBeUndefined();
+
+    // A second restore in the same run takes another backup.
+    const again = await service.restore(result.backup?.ts as string);
+    expect(again.backup?.ts).not.toBe(result.backup?.ts);
+    expect(fake.store.get('/org/gnome/Ptyxis/')?.get('audible-bell')).toBe(
+      'false',
+    );
+  });
+
+  it('applies the rest of a restore and names the keys that failed', async () => {
+    const first = await service.ensureBackup();
+    runner.respond((argv, opts) =>
+      argv[1] === 'set' && argv[3] === 'opacity'
+        ? { code: 1, stderr: 'refused\n' }
+        : fake.respond(argv, opts),
+    );
+    const error = await service
+      .restore(first?.ts as string)
+      .catch((e: unknown) => e as HttpError);
+    expect(error).toBeInstanceOf(HttpError);
+    expect((error as HttpError).status).toBe(422);
+    expect((error as HttpError).detail).toContain('opacity');
+    const backups = await service.listBackups();
+    expect(backups).toHaveLength(2);
+    expect((error as HttpError).message).toContain(backups[0].ts);
+    expect(fake.store.get('/org/gnome/Ptyxis/')?.get('profile-uuids')).toBe(
+      `['${DEFAULT_UUID}', '${OTHER_UUID}']`,
+    );
+  });
+
+  it('serialises concurrent profile list changes so no profile is lost', async () => {
+    const [a, b] = await Promise.all([
+      service.createProfile('ptyxis', 'A'),
+      service.createProfile('ptyxis', 'B'),
+    ]);
+    const c = await service.duplicateProfile('ptyxis', OTHER_UUID);
+    await Promise.all([
+      service.deleteProfile('ptyxis', OTHER_UUID),
+      service.duplicateProfile('ptyxis', DEFAULT_UUID, 'D'),
+    ]);
+    const uuids = (await service.profiles('ptyxis')).profiles.map(
+      (p) => p.uuid,
+    );
+    expect(uuids).toEqual(expect.arrayContaining([DEFAULT_UUID, a, b, c]));
+    expect(uuids).toHaveLength(5);
+    expect(uuids).not.toContain(OTHER_UUID);
+  });
+
+  it('returns the view of its own write when sets race', async () => {
+    const g = { part: 'global' } as const;
+    const [first, second] = await Promise.all([
+      service.setAndView('ptyxis', g, 'cursor-shape', "'ibeam'"),
+      service.setAndView('ptyxis', g, 'cursor-shape', "'underline'"),
+    ]);
+    const shape = (v: typeof first) =>
+      v.keys.find((k) => k.name === 'cursor-shape')?.value;
+    expect(shape(first)).toBe("'ibeam'");
+    expect(shape(second)).toBe("'underline'");
   });
 
   it('lists user and built-in Ptyxis palettes, tolerating a failed gresource', async () => {

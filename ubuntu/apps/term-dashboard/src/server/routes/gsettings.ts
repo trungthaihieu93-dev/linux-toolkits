@@ -32,7 +32,7 @@ function target(
  * - `POST .../reset`, body `GSettingsResetRequest` → updated view
  * - `GET profiles` → `TerminalProfilesView`; `POST profiles` (`CreateProfileRequest`) → 201 `ProfileCreated`
  * - `POST profiles/:uuid/duplicate` (`DuplicateProfileRequest`) → 201 `ProfileCreated`
- * - `PUT profiles/:uuid/default` → 204; `DELETE profiles/:uuid` → 204 (never the default)
+ * - `PUT profiles/:uuid/default` → 204; `DELETE profiles/:uuid` → 204 (422 for the default)
  * - `GET palettes` → `NameList` (Ptyxis only; 404 for GNOME Terminal)
  */
 export function gsettingsRoutes(app: Hono, gs: GSettingsService): void {
@@ -48,15 +48,17 @@ export function gsettingsRoutes(app: Hono, gs: GSettingsService): void {
       const kind = kindParam(c);
       const t = target(c, part);
       const body = await objectBody(c);
-      await gs.set(kind, t, body['key'], body['value']);
-      return c.json<GSettingsSchemaView>(await gs.view(kind, t));
+      return c.json<GSettingsSchemaView>(
+        await gs.setAndView(kind, t, body['key'], body['value']),
+      );
     });
     app.post(`${path}/reset`, async (c) => {
       const kind = kindParam(c);
       const t = target(c, part);
       const body = await objectBody(c);
-      await gs.reset(kind, t, body['key']);
-      return c.json<GSettingsSchemaView>(await gs.view(kind, t));
+      return c.json<GSettingsSchemaView>(
+        await gs.resetAndView(kind, t, body['key']),
+      );
     });
   }
 

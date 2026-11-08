@@ -49,8 +49,6 @@ export function backupRoutes(app: Hono, s: Services): void {
     return c.json<SaveResult>(await s.files.restore(fileId, ts, base));
   });
   app.post('/api/backups/gsettings/:ts/restore', async (c) =>
-    c.json<GSettingsRestoreResult>({
-      restored: await s.gsettings.restore(tsParam(c)),
-    }),
+    c.json<GSettingsRestoreResult>(await s.gsettings.restore(tsParam(c))),
   );
 }
