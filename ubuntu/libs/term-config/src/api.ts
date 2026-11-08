@@ -5,7 +5,9 @@
  * Conventions:
  * - Every body is JSON; errors are `ApiError` with a 4xx/5xx status
  *   (400 invalid input, 401 no session, 404 unknown id, 409 file changed on
- *   disk since `baseMtimeMs`, 413 body too large).
+ *   disk since `baseMtimeMs`, 413 body too large, 422 the syntax check of a
+ *   save failed (`detail` holds its output), 503 the program or schema the
+ *   route needs is not installed).
  * - Every `/api/*` call except `GET /api/health` and `POST /api/session`
  *   carries `Authorization: Bearer <SessionResponse.token>`.
  * - GVariant values travel as GVariant text (`'block'`, `uint32 80`,
@@ -554,6 +556,14 @@ export interface BackupContent {
 }
 
 /**
+ * Optional body of `POST /api/backups/files/:fileId/:ts/restore`. Without
+ * `baseMtimeMs` the restore does not check for concurrent changes.
+ */
+export interface BackupRestoreRequest {
+  baseMtimeMs?: number | null;
+}
+
+/**
  * `POST /api/backups/files/:fileId/:ts/{preview|restore}` → `SavePreview` / `SaveResult`;
  * `POST /api/backups/gsettings/:ts/restore` → `{ restored: TerminalKind[] }`.
  */
@@ -651,6 +661,12 @@ export const API_PATHS = {
     `/api/terminals/${seg(kind)}/profiles`,
   terminalProfile: (kind: TerminalKind, uuid: string) =>
     `/api/terminals/${seg(kind)}/profiles/${seg(uuid)}`,
+  terminalProfileDuplicate: (kind: TerminalKind, uuid: string) =>
+    `/api/terminals/${seg(kind)}/profiles/${seg(uuid)}/duplicate`,
+  terminalProfileDefault: (kind: TerminalKind, uuid: string) =>
+    `/api/terminals/${seg(kind)}/profiles/${seg(uuid)}/default`,
+  /** `POST <global|shortcuts|profile path>/reset`, body `GSettingsResetRequest`. */
+  terminalReset: (schemaPath: string) => `${schemaPath}/reset`,
   ghosttySchema: '/api/ghostty/schema',
   ghosttyConfig: '/api/ghostty/config',
   ghosttyThemes: '/api/ghostty/themes',
@@ -667,6 +683,11 @@ export const API_PATHS = {
   backups: '/api/backups',
   backupFile: (fileId: FileId, ts: BackupTimestamp) =>
     `/api/backups/files/${seg(fileId)}/${seg(ts)}`,
+  backupFileAction: (
+    fileId: FileId,
+    ts: BackupTimestamp,
+    action: 'preview' | 'restore',
+  ) => `/api/backups/files/${seg(fileId)}/${seg(ts)}/${action}`,
   gsettingsRestore: (ts: BackupTimestamp) =>
     `/api/backups/gsettings/${seg(ts)}/restore`,
 } as const;
