@@ -117,7 +117,8 @@ export function BackupsPage() {
   const [gsTarget, setGsTarget] = useState<GSettingsBackupRef | null>(null);
   const flow = useSaveFlow();
 
-  const restoreFile = (b: BackupRef) =>
+  const restoreFile = (b: BackupRef) => {
+    if (flow.previewing) return;
     void flow.start({
       title: `Restore ${b.fileId} from ${formatBackupTs(b.ts)}`,
       description:
@@ -148,6 +149,7 @@ export function BackupsPage() {
         backups.reload();
       },
     });
+  };
 
   const restoreGSettings = async (b: GSettingsBackupRef) => {
     try {
@@ -241,7 +243,7 @@ export function BackupsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            disabled={flow.previewing}
+                            aria-disabled={flow.previewing || undefined}
                             aria-label={`Restore ${fileId} from ${formatBackupTs(b.ts)}`}
                             onClick={() => restoreFile(b)}
                           >

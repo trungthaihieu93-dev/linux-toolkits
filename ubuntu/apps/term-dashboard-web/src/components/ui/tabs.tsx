@@ -43,7 +43,10 @@ export function TabsContent({
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn('mt-3 focus-visible:outline-none', className)}
+      className={cn(
+        'mt-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        className,
+      )}
       {...props}
     />
   );

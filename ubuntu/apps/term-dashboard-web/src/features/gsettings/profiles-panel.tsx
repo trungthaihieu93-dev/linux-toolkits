@@ -15,7 +15,7 @@ import {
   StarIcon,
   Trash2Icon,
 } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { StatePanel } from '../../components/state-panel';
 import {
   AlertDialog,
@@ -97,7 +97,6 @@ function NameDialog({
             Profile name
             <Input
               value={name}
-              autoFocus
               maxLength={MAX_LABEL}
               aria-invalid={(name !== '' && invalid) || undefined}
               onChange={(e) => setName(e.target.value)}
@@ -157,7 +156,12 @@ export function ProfilesPanel({
     view?.profiles[0] ??
     null;
 
+  // Buttons stay focusable while a change runs (aria-disabled); this guard
+  // ignores clicks until it finishes.
+  const running = useRef(false);
   const run = async (what: string, action: () => Promise<void>) => {
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     try {
       await action();
@@ -171,6 +175,7 @@ export function ProfilesPanel({
       });
       throw e;
     } finally {
+      running.current = false;
       setBusy(false);
     }
   };
@@ -249,7 +254,7 @@ export function ProfilesPanel({
         <Button
           size="sm"
           onClick={() => setDialog({ type: 'create' })}
-          disabled={busy}
+          aria-disabled={busy || undefined}
         >
           <PlusIcon aria-hidden />
           New profile
@@ -295,7 +300,7 @@ export function ProfilesPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={busy}
+                    aria-disabled={busy || undefined}
                     aria-label={`Rename ${p.label}`}
                     onClick={() => setDialog({ type: 'rename', profile: p })}
                   >
@@ -305,7 +310,7 @@ export function ProfilesPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={busy}
+                    aria-disabled={busy || undefined}
                     aria-label={`Duplicate ${p.label}`}
                     onClick={() => void duplicate(p)}
                   >
@@ -315,7 +320,8 @@ export function ProfilesPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={busy || p.isDefault}
+                    disabled={p.isDefault}
+                    aria-disabled={busy || undefined}
                     aria-label={`Set ${p.label} as default`}
                     onClick={() => void makeDefault(p)}
                   >
@@ -325,7 +331,8 @@ export function ProfilesPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={busy || p.isDefault}
+                    disabled={p.isDefault}
+                    aria-disabled={busy || undefined}
                     title={
                       p.isDefault
                         ? 'The default profile cannot be deleted'

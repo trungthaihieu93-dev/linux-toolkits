@@ -189,7 +189,10 @@ export function GSettingsForm({
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <p className="font-mono text-xs text-muted-foreground" aria-live="polite">
+      <p
+        className="break-all font-mono text-xs text-muted-foreground"
+        aria-live="polite"
+      >
         gsettings {view.schema}
         {view.path ? `:${view.path}` : ''} · changes apply as you edit
         {writeState === 'saving' && ' · writing…'}

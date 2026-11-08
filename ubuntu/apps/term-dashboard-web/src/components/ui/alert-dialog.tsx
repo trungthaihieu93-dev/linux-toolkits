@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react';
 import { cn } from '../../lib/utils';
 import { buttonVariants } from './button';
 import { DialogFooter, DialogHeader } from './dialog';
+import { useFocusReturn } from './focus-return';
 
 export const AlertDialog = AlertDialogPrimitive.Root;
 export const AlertDialogTrigger = AlertDialogPrimitive.Trigger;
@@ -11,8 +12,11 @@ export const AlertDialogFooter = DialogFooter;
 
 export function AlertDialogContent({
   className,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: ComponentProps<typeof AlertDialogPrimitive.Content>) {
+  const focus = useFocusReturn({ onOpenAutoFocus, onCloseAutoFocus });
   return (
     <AlertDialogPrimitive.Portal>
       <AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-overlay data-[state=open]:animate-fade-in" />
@@ -23,6 +27,7 @@ export function AlertDialogContent({
           className,
         )}
         {...props}
+        {...focus}
       />
     </AlertDialogPrimitive.Portal>
   );

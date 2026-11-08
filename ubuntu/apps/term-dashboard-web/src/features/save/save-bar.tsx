@@ -41,11 +41,22 @@ export function SaveBar({
         )}
       </p>
       <div className="flex gap-2">
-        <Button variant="outline" onClick={onDiscard} disabled={busy}>
+        <Button
+          variant="outline"
+          onClick={() => !busy && onDiscard()}
+          aria-disabled={busy || undefined}
+        >
           <Undo2Icon aria-hidden />
           Discard
         </Button>
-        <Button variant="cta" onClick={onReview} disabled={busy || disabled}>
+        {/* Busy keeps the button focusable (aria-disabled), so focus can
+            return to it when the review dialog closes. */}
+        <Button
+          variant="cta"
+          onClick={() => !busy && onReview()}
+          disabled={disabled}
+          aria-disabled={busy || undefined}
+        >
           {busy ? (
             <LoaderCircleIcon className="animate-spin" aria-hidden />
           ) : (
