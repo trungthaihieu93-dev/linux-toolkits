@@ -338,6 +338,28 @@ describe('FileStore safety', () => {
     },
   );
 
+  it('keeps a leading UTF-8 BOM through a read and a save', async () => {
+    const s = new FileStore(
+      resolveDirs(sbx.env, sbx.home),
+      new RecordingCommandRunner(() => ({ code: 0 })),
+    );
+    const original = Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from('# with BOM\n'),
+    ]);
+    await writeFile(bashrc(), original);
+    const snap = await s.read('bashrc');
+    expect(snap.readOnly).toBeUndefined();
+    expect(snap.content).toBe('\uFEFF# with BOM\n');
+
+    const saved = await s.write('bashrc', snap.content, {
+      baseMtimeMs: snap.mtimeMs,
+    });
+    expect(await readFile(bashrc())).toEqual(original);
+    const backup = await s.readBackup('bashrc', saved.backup?.ts as string);
+    expect(backup.content).toBe('\uFEFF# with BOM\n');
+  });
+
   it.skipIf(!hasDash)(
     'checks .profile with sh -n and bash files with bash -n',
     async () => {

@@ -126,7 +126,9 @@ async function realpathOr(path: string): Promise<string> {
   }
 }
 
-const utf8 = new TextDecoder('utf-8', { fatal: true });
+// ignoreBOM keeps a leading byte order mark as U+FEFF in the text, so a
+// save writes it back instead of silently dropping it.
+const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 /** The text of `bytes`, or null when they are not valid UTF-8. */
 export function decodeUtf8(bytes: Uint8Array): string | null {
