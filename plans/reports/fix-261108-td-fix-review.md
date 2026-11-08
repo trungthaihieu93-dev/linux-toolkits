@@ -139,3 +139,30 @@ gate. `mount()` now waits for the socket (5/5 full runs pass).
   them.
 - `terminal-page.spec.tsx` is outside this task's findings. I changed it only
   to remove a test race that blocked the test gate.
+
+## Follow-up: final review fixes (code-review-261108-td-final.md)
+
+Date: 2026-11-08 (Asia/Saigon). Each new spec was run on the unfixed code first and failed as expected, then passed after the fix.
+
+Commits:
+
+- `4450c72` fix(term-dashboard): save a symlinked Ghostty config pair as one file
+- `9ad990f` fix(term-dashboard-web): keep a leading BOM through raw editor edits
+- `4c86ae8` refactor(term-dashboard): drop the unreachable closed check in listen
+
+**M1, Ghostty symlinked pair (fixed).** When both Ghostty files exist and resolve to the same real path, `GhosttyService` now plans and writes only `ghostty-legacy` (`config`, the file Ghostty loads last). One save writes the file once. `set`, `unset` and `setList` all succeed, the symlink survives, and there are no "set in both" or "moved" notices. The config view skips the pair when it looks for conflicts. It also marks `config.ghostty` with a new optional `sameFileAs: 'ghostty-legacy'` field in `GhosttyFileView`. The web form reads that view only once, so repeatable keys such as `keybind` are not shown twice and a list edit does not double them. The file tab shows a "Same file" note. FileStore keeps its duplicate-real-path 400 as a backstop, and its spec now says so. New specs: 5 in `ghostty-service.spec.ts` (temp HOME, `config -> config.ghostty`: view, set, unset, setList, preview), 1 in `ghostty-fields.spec.ts` and 1 in `ghostty-page.spec.tsx`. Before the fix, unset and setList failed with the 400; set and the view failed on the bogus notices and conflicts. README:124-130 now describes the pair.
+
+**L1, raw-editor BOM (fixed).** I did not use `getValue(undefined, true)`. `@monaco-editor/react` compares the `value` prop with `editor.getValue()`, which has no BOM. If a value with a BOM came back through `onChange`, the library would re-apply it as an edit and put a literal U+FEFF into the text. Instead, `CodeEditor` gives Monaco the value without the BOM and adds the BOM back to every `onChange` value when the original had one. The new `monaco-editors.spec.tsx` uses a stand-in Editor that mimics Monaco: it splits the BOM off on create, passes the model text to `onChange`, and applies a differing prop verbatim. The spec checks that edited values keep exactly one BOM and that the editor text never gains a U+FEFF; it failed on the old code. I corrected the comment in `file-store.ts` and the README BOM sentence.
+
+**L2, `listen.ts` `closed` branch (removed).** The flag is gone. A comment at the `socket.destroyed` check and the function doc now state the guarantee: every socket is tracked from accept, and `close()` destroys it. The spec is renamed to "close() destroys a connection still in its peer check; the late answer serves nothing". It passes 7/7 on Node 26 and 6 plus 1 skipped on Bun.
+
+Gates (from `ubuntu/`, `NX_DAEMON=false`), all exit 0:
+
+- `bun run lint`: 0 errors.
+- `run-many -t test --skip-nx-cache`: core 53, term-config 175, toolchains 161, linux-toolchain 55, term-dashboard-web 144, term-dashboard 228 + 1 skipped.
+- `run-many -t build --skip-nx-cache`.
+- `run-many -t e2e --skip-nx-cache`: linux-toolchain 5, term-dashboard 17.
+- `e2e-node.sh` (Node 26.13): 17/17.
+- `format:check`.
+
+Safety: all tests used temp HOME/XDG dirs. `sha256sum ~/.zshrc ~/.bashrc ~/.config/ghostty/config*` and `gsettings list-recursively org.gnome.Ptyxis | sha256sum` were identical before and after. No process I started is still running.
