@@ -187,11 +187,26 @@ describe('GSettingsForm invalid number text', () => {
     expect(calls.map((c) => c.body)).toEqual([{ key: 'size', value: '50' }]);
   });
 
+  it('writes a valid waiting value once when the page closes', async () => {
+    const { calls } = await mount(schema({ size: '10' }));
+    typeSize('15');
+    cleanup();
+    await act(async () => {
+      vi.advanceTimersByTime(GSETTINGS_WRITE_DELAY_MS * 2);
+    });
+    await settle();
+    expect(calls.map((c) => c.body)).toEqual([{ key: 'size', value: '15' }]);
+  });
+
   it('writes nothing for an invalid box when the page closes', async () => {
     const { calls } = await mount(schema({ size: '10' }));
     typeSize('15');
     typeSize('150');
     cleanup();
+    // Long past the write delay: no timer armed during unmount may fire.
+    await act(async () => {
+      vi.advanceTimersByTime(GSETTINGS_WRITE_DELAY_MS * 2);
+    });
     await settle();
     expect(calls).toEqual([]);
   });

@@ -145,7 +145,12 @@ export function GSettingsForm({
     pending.current.delete(key);
   };
 
+  // Set while the form unmounts: the flush below is the last write, and a
+  // field's unmount cleanup must not arm a timer nothing would clear.
+  const unmounted = useRef(false);
+
   const schedule = (key: string, value: FieldValue) => {
+    if (unmounted.current) return;
     updateDrafts((d) => ({ ...d, [key]: value }));
     cancel(key);
     if (invalid.current.has(key)) return;
@@ -159,17 +164,20 @@ export function GSettingsForm({
   };
 
   // Leaving the page writes what is still waiting for its pause.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    unmounted.current = false;
+    return () => {
+      unmounted.current = true;
       for (const t of timers.current.values()) clearTimeout(t);
       for (const run of pending.current.values()) run();
-    },
-    [],
-  );
+    };
+  }, []);
 
   // A box turning invalid drops its waiting write (it would store the last
   // valid number, not what the box shows); turning valid writes the draft.
   const onValidityChange = (key: string, bad: boolean) => {
+    // An unmounting field reports itself valid; its text is gone, not fixed.
+    if (unmounted.current) return;
     if (bad) {
       invalid.current.add(key);
       cancel(key);
