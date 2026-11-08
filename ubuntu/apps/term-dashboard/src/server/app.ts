@@ -1,6 +1,17 @@
 import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import type { ApiError } from '@linux-toolchain/term-config';
+import { HttpError } from '../errors';
 import { createGuard, type AccessPolicy } from './guard';
+import { activityRoutes } from './routes/activity';
+import { backupRoutes } from './routes/backups';
+import { ghosttyRoutes } from './routes/ghostty';
+import { gsettingsRoutes } from './routes/gsettings';
+import { inventoryRoutes } from './routes/inventory';
+import { ptyRoutes } from './routes/pty';
+import { settingsRoutes } from './routes/settings';
+import { shellRoutes } from './routes/shells';
+import type { Services } from './services';
 import type { SessionStore } from './session';
 import { createStaticHandler } from './static';
 
@@ -25,7 +36,15 @@ export interface AppDeps {
   webRoot: string | null;
   /** Routes (matched on the path) that accept `BODY_LIMITS.fileContent`. */
   fileContentRoutes?: readonly RegExp[];
+  /** Backend services; without them only health, session and static are served. */
+  services?: Services;
 }
+
+/** Routes whose bodies carry whole files or long edit lists. */
+export const FILE_CONTENT_ROUTES: readonly RegExp[] = [
+  /^\/api\/shells\/[^/]+\/(config|raw)\/(preview|save)$/,
+  /^\/api\/ghostty\/(preview|save)$/,
+];
 
 function limitBodies(fileContentRoutes: readonly RegExp[]): MiddlewareHandler {
   const tooLarge = (c: Parameters<MiddlewareHandler>[0]) =>
@@ -66,12 +85,26 @@ export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
 
   app.onError((error, c) => {
+    if (error instanceof HttpError) {
+      const body: ApiError = { error: error.message };
+      if (error.detail !== undefined) body.detail = error.detail;
+      return c.json(body, error.status);
+    }
     console.error(`td: ${c.req.method} ${c.req.path}: ${error.message}`);
-    return c.json({ error: 'internal error' }, 500);
+    return c.json<ApiError>(
+      { error: 'internal error', detail: error.message },
+      500,
+    );
   });
 
   app.use('*', createGuard(deps.policy, deps.session));
-  app.use('/api/*', limitBodies(deps.fileContentRoutes ?? []));
+  app.use(
+    '/api/*',
+    limitBodies([
+      ...(deps.fileContentRoutes ?? []),
+      ...(deps.services ? FILE_CONTENT_ROUTES : []),
+    ]),
+  );
 
   app.get('/api/health', (c) =>
     c.json<Health>({
@@ -94,6 +127,18 @@ export function createApp(deps: AppDeps): Hono {
   app.post('/api/launch-code', (c) =>
     c.json({ code: deps.session.mintLaunchCode() }),
   );
+
+  const s = deps.services;
+  if (s) {
+    settingsRoutes(app, s.settings);
+    inventoryRoutes(app, s);
+    gsettingsRoutes(app, s.gsettings);
+    ghosttyRoutes(app, s.ghostty);
+    shellRoutes(app, s.shells);
+    backupRoutes(app, s);
+    activityRoutes(app, s.bus);
+    ptyRoutes(app, s.pty);
+  }
 
   app.all('/api/*', (c) => c.json({ error: 'not found' }, 404));
   app.all('/ws/*', (c) => c.json({ error: 'not found' }, 404));

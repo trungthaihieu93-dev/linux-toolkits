@@ -12,11 +12,13 @@ import {
   writeInstanceFile,
 } from '../server/instance';
 import {
+  createWebSocketServer,
   LOOPBACK,
   listen,
   PortInUseError,
   type RunningServer,
 } from '../server/listen';
+import type { Services } from '../server/services';
 import { createSessionStore, LAUNCH_CODE_TTL_MS } from '../server/session';
 
 export interface TextSink {
@@ -47,6 +49,8 @@ export interface StartDeps {
   cleanups: CleanupRegistry;
   /** Called on a second signal while shutdown is still running. */
   forceExit: (code: number) => void;
+  /** Builds the backend services; without it only the server shell runs. */
+  createServices?: () => Services;
 }
 
 export const EXIT = { ok: 0, error: 1, usage: 2 } as const;
@@ -101,17 +105,23 @@ export async function startServer(
     devOrigin: opts.devOrigin,
   };
   const session = createSessionStore();
+  const services = deps.createServices?.();
   const app = createApp({
     session,
     policy,
     version: deps.version,
     pid: deps.pid,
     webRoot: deps.webRoot,
+    services,
   });
 
   let server: RunningServer;
   try {
-    server = await listen(app.fetch, opts.port);
+    server = await listen(
+      app.fetch,
+      opts.port,
+      services ? createWebSocketServer() : undefined,
+    );
   } catch (error) {
     if (error instanceof PortInUseError) {
       err.write(
@@ -139,6 +149,8 @@ export async function startServer(
     removeInstanceFile(deps.instanceFile, deps.pid, deps.uid),
   );
   deps.cleanups.register(() => server.close());
+  // Registered last, so it runs first: terminals end before the server stops.
+  if (services) deps.cleanups.register(() => services.close());
 
   const origin = opts.devOrigin?.origin ?? `http://${LOOPBACK}:${boundPort}`;
   const url = launchUrl(origin, session.mintLaunchCode());

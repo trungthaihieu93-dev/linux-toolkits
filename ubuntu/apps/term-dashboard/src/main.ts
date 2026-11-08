@@ -6,6 +6,7 @@ import { run } from './cli/program';
 import { startServer } from './cli/start';
 import { createCleanupRegistry, processSignals } from './server/cleanup';
 import { instanceFilePath, isProcessAlive } from './server/instance';
+import { createServices } from './server/services';
 
 /** Grace period for cleanups before the process is forced down. */
 const SHUTDOWN_GRACE_MS = 5000;
@@ -32,6 +33,8 @@ run(process.argv.slice(2), {
       signals: processSignals,
       cleanups: createCleanupRegistry(),
       forceExit: (code) => process.exit(code),
+      createServices: () =>
+        createServices({ env: process.env, home: homedir() }),
     }),
 })
   .then((code) => {
