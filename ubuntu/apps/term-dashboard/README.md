@@ -61,7 +61,8 @@ td only prints the URL in your terminal.
 
 Exit codes: `0` success, `1` error, `2` usage error, and `129`, `130` or `143`
 after SIGHUP, SIGINT or SIGTERM. Stopping td by any of these signals ends every
-terminal it opened, background jobs included.
+terminal it opened, background jobs included, and closes the connections of
+open dashboard tabs, so td exits at once even while a tab is open.
 
 Settings (theme, the shell for the Terminal page) are kept in
 `~/.config/term-dashboard/settings.json`.
@@ -120,12 +121,16 @@ reversible.
   backup, and the new content replaces it atomically with the same mode. A
   file changed on disk since it was loaded is never overwritten (the
   dashboard asks you to reload), and saves to the same file from two tabs
-  run one after the other, so one of them is told to reload. A Ghostty save
+  run one after the other, so one of them is told to reload. This holds when
+  two of the files are one file through a symlink (`~/.bash_profile` pointing
+  at `.profile`, for example). A Ghostty save
   that touches both files checks both first; if writing the second fails, the
   first is put back from its backup.
 - **Only UTF-8 is edited.** A file that is not valid UTF-8 is shown read-only
   with the reason, and td refuses to save it or restore a backup that is not
-  UTF-8, so no byte is ever replaced. Edit such files in a text editor.
+  UTF-8, so it never rewrites bytes it could not decode. A UTF-8 file keeps a
+  leading byte order mark, so saving it unchanged writes the same bytes. Edit
+  other files in a text editor.
 - **gsettings, never dconf.** Terminal settings go through `gsettings` only.
   Before the first change of each run, and again right before every restore,
   td saves a JSON backup of every installed terminal's settings.
@@ -204,12 +209,22 @@ The unit, integration and e2e tests use the same setup.
 ## Maintainer notes
 
 The package is `"private": true`, and the CI `release` job publishes only
-`linux-toolchain`. CI tests td in the `checks` job and packs it in the `td` job
-(artifact `td-package`); `td-node-compat` runs `td --version` and a health
-check on Node 22.13 and 24, and `td-smoke` runs the tarball with `npx`. The
-`release` job does not need the td jobs, so a td failure never holds back a
-`linux-toolchain` publish. Publishing td is a separate change that needs the
-maintainer's go-ahead:
+`linux-toolchain`.
+
+td's lint, unit tests, build and e2e tests run in the `checks` job with the
+rest of the workspace, together with the zsh install they need. td shares
+libraries with `linux-toolchain`, and CI covers every project, so `release`
+depends on them: a failing td test, or a failed zsh install, holds back a
+`linux-toolchain` publish.
+
+Only the td packaging and runtime checks sit outside the release gate. The
+`td` job packs the package (artifact `td-package`). `td-node-compat` runs
+`td --version`, a health check, and a shutdown check on Node 22.13 and 24:
+with an authenticated activity stream open, SIGTERM must stop td promptly
+(exit 143) and remove its instance file. `td-smoke` runs the tarball with
+`npx`. `release` does not need these three jobs.
+
+Publishing td is a separate change that needs the maintainer's go-ahead:
 
 1. Remove `"private": true` from `apps/term-dashboard/package.json`.
 2. Add the `td-package` tarball to the `release` job, next to the
