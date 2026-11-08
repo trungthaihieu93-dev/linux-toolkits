@@ -55,7 +55,9 @@
  * Borders, `--ring` and `--input` are non-text UI (3:1 target): the focus
  * ring uses `--ring` (primary) at 2px with an offset, which is >= 3:1 on the
  * background in both modes (dark 5.23, light 4.85). The `--ansi-*` colours
- * are the terminal palette, chosen by programs running in the shell.
+ * are the terminal palette, chosen by programs running in the shell; a few
+ * are faint on the terminal background, and the xterm option
+ * `minimumContrastRatio: 4.5` raises them to 4.5:1 as they are drawn.
  */
 
 :root {

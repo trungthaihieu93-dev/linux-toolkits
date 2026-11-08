@@ -97,6 +97,9 @@ function TerminalView({ token }: { token: string }) {
       scrollback: 5000,
       allowProposedApi: false,
       theme: terminalTheme(),
+      // Programs pick ANSI colours that can be faint on the background (light
+      // bright-white, dark bright-black); xterm adjusts them to 4.5:1.
+      minimumContrastRatio: 4.5,
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -125,8 +128,11 @@ function TerminalView({ token }: { token: string }) {
 
     const observer = new ResizeObserver(() => sendSize());
     observer.observe(host);
+    let disposed = false;
     // Measure again once the web font is in, so cell size is right.
-    void document.fonts?.ready.then(() => sendSize());
+    void document.fonts?.ready.then(() => {
+      if (!disposed) sendSize();
+    });
 
     ws.onopen = () => {
       sendSize();
@@ -175,10 +181,15 @@ function TerminalView({ token }: { token: string }) {
     window.addEventListener('pagehide', onUnload);
 
     return () => {
+      disposed = true;
       window.removeEventListener('pagehide', onUnload);
       observer.disconnect();
       onData.dispose();
       onBinary.dispose();
+      // Frames already queued for this socket must not reach the disposed
+      // terminal or set the state of a session that is gone.
+      ws.onopen = null;
+      ws.onmessage = null;
       ws.onclose = null;
       ws.close(1000, 'terminal closed');
       term.dispose();
