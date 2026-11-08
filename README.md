@@ -2,7 +2,10 @@
 
 Developer machine setup for Debian/Ubuntu. The main product is
 [`linux-toolchain`](./ubuntu/apps/linux-toolchain/README.md), an interactive
-installer for developer toolchains published to npm.
+installer for developer toolchains published to npm. The same workspace
+holds [`td`](./ubuntu/apps/term-dashboard/README.md) (`linux-term-dashboard`),
+a local web dashboard for terminal and shell configuration; it is not
+published yet.
 
 ### Prerequisites
 
@@ -44,13 +47,13 @@ the [CLI README](./ubuntu/apps/linux-toolchain/README.md) is the short version.
 
 ## Repository layout
 
-| Path                                                   | Contents                                                                          |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| [`ubuntu/`](./ubuntu/README.md)                        | Nx workspace: the CLI app, its libraries and the original `install-toolchains.sh` |
-| [`website/`](./website/README.md)                      | Documentation site (Astro + Starlight), deployed to Cloudflare Pages              |
-| `.github/workflows/`                                   | CI, the docs build and deploy, and the npm publish workflow                       |
-| [`AGENTS.md`](./AGENTS.md), [`CLAUDE.md`](./CLAUDE.md) | Guide for AI agents and contributors; `CLAUDE.md` imports `AGENTS.md`             |
-| `.claude/`, `.agents/`, `.codex/`, `opencode.json`     | Configuration and skills for Claude Code, Codex and opencode                      |
+| Path                                                   | Contents                                                                             |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [`ubuntu/`](./ubuntu/README.md)                        | Nx workspace: the CLI apps, their libraries and the original `install-toolchains.sh` |
+| [`website/`](./website/README.md)                      | Documentation site (Astro + Starlight), deployed to Cloudflare Pages                 |
+| `.github/workflows/`                                   | CI, the docs build and deploy, and the npm publish workflow                          |
+| [`AGENTS.md`](./AGENTS.md), [`CLAUDE.md`](./CLAUDE.md) | Guide for AI agents and contributors; `CLAUDE.md` imports `AGENTS.md`                |
+| `.claude/`, `.agents/`, `.codex/`, `opencode.json`     | Configuration and skills for Claude Code, Codex and opencode                         |
 
 ## Development
 

@@ -1,0 +1,169 @@
+/*
+ * term-dashboard design tokens: the only file with raw colour values.
+ * Components use these through Tailwind utilities (`bg-card`, `text-run`, ...)
+ * or `var(--token)`, never hex literals.
+ *
+ * Style: dark (OLED) operations console. Dark is the default (`.dark` on
+ * <html>, set before first paint by index.html); light is complete.
+ * Primary blue is #3B82F6 (dark) / #2563EB (light). `--run` marks live and
+ * success states, `--warn` warnings, `--cta` (#F97316) is reserved for
+ * Apply/Save. `--link` is the primary hue tuned for text on every surface.
+ *
+ * WCAG 2.1 contrast, computed from the hex values below (relative luminance,
+ * sRGB). Every text/background pair is at or above 4.5:1 in both modes.
+ *   pair (text on background)                 dark   light
+ *   foreground on background                  16.27   16.77
+ *   foreground on card                        15.37   17.85
+ *   foreground on popover                     14.80   17.85
+ *   foreground on muted                       13.71   15.73
+ *   foreground on accent                      12.78   14.73
+ *   muted-foreground on background             7.75    7.10
+ *   muted-foreground on card                   7.33    7.56
+ *   muted-foreground on popover                7.06    7.56
+ *   muted-foreground on muted                  6.53    6.66
+ *   muted-foreground on accent                 6.09    6.24
+ *   link on background                         7.56    6.30
+ *   link on card                               7.14    6.70
+ *   link on popover                            6.88    6.70
+ *   link on muted                              6.37    5.90
+ *   link on accent                             5.94    5.53
+ *   destructive on background                  6.95    6.08
+ *   destructive on card                        6.57    6.47
+ *   destructive on popover                     6.32    6.47
+ *   destructive on muted                       5.86    5.70
+ *   destructive on accent                      5.46    5.34
+ *   run on background                         11.03    5.97
+ *   run on card                               10.42    6.35
+ *   run on popover                            10.04    6.35
+ *   run on muted                               9.30    5.60
+ *   run on accent                              8.67    5.24
+ *   warn on background                        11.51    6.00
+ *   warn on card                              10.88    6.38
+ *   warn on popover                           10.48    6.38
+ *   warn on muted                              9.70    5.62
+ *   warn on accent                             9.05    5.27
+ *   primary-foreground on primary              5.23    5.17
+ *   primary-foreground on primary-hover        7.56    6.70
+ *   secondary-foreground on secondary         13.71   15.73
+ *   accent-foreground on accent               12.78   14.73
+ *   destructive-foreground on destructive      6.95    6.47
+ *   run-foreground on run                     11.03    6.35
+ *   warn-foreground on warn                   11.51    6.38
+ *   cta-foreground on cta                      6.86    6.86
+ *   term-fg on term-bg                        16.27   14.68
+ *
+ * Borders, `--ring` and `--input` are non-text UI (3:1 target): the focus
+ * ring uses `--ring` (primary) at 2px with an offset, which is >= 3:1 on the
+ * background in both modes (dark 5.23, light 4.85). The `--ansi-*` colours
+ * are the terminal palette, chosen by programs running in the shell; a few
+ * are faint on the terminal background, and the xterm option
+ * `minimumContrastRatio: 4.5` raises them to 4.5:1 as they are drawn.
+ */
+
+:root {
+  --radius: 0.5rem;
+
+  --background: #f6f8fa;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  /* Hover darkens in light mode and lightens in dark mode, so the label
+     keeps at least the contrast it has at rest. */
+  --primary-hover: #1d4ed8;
+  --secondary: #edf1f5;
+  --secondary-foreground: #0f172a;
+  --muted: #edf1f5;
+  --muted-foreground: #4a5565;
+  --accent: #e3eaf3;
+  --accent-foreground: #0f172a;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --border: #d5dce5;
+  --input: #c3ccd8;
+  --ring: #2563eb;
+  --link: #1d4ed8;
+  --run: #126e34;
+  --run-foreground: #ffffff;
+  --warn: #8a5206;
+  --warn-foreground: #ffffff;
+  --cta: #f97316;
+  --cta-foreground: #0b0f14;
+  --overlay: rgb(15 23 42 / 0.45);
+
+  --term-bg: #ffffff;
+  --term-fg: #1f2937;
+  --term-cursor: #2563eb;
+  --term-selection: rgb(37 99 235 / 0.22);
+  --ansi-black: #1f2937;
+  --ansi-red: #b91c1c;
+  --ansi-green: #126e34;
+  --ansi-yellow: #8a5206;
+  --ansi-blue: #1d4ed8;
+  --ansi-magenta: #7e22ce;
+  --ansi-cyan: #0e7490;
+  --ansi-white: #6b7280;
+  --ansi-bright-black: #4b5563;
+  --ansi-bright-red: #dc2626;
+  --ansi-bright-green: #16a34a;
+  --ansi-bright-yellow: #ca8a04;
+  --ansi-bright-blue: #2563eb;
+  --ansi-bright-magenta: #9333ea;
+  --ansi-bright-cyan: #0891b2;
+  --ansi-bright-white: #9ca3af;
+}
+
+.dark {
+  --background: #0b0f14;
+  --foreground: #e6edf3;
+  --card: #11161d;
+  --card-foreground: #e6edf3;
+  --popover: #141a22;
+  --popover-foreground: #e6edf3;
+  --primary: #3b82f6;
+  --primary-foreground: #0b0f14;
+  --primary-hover: #60a5fa;
+  --secondary: #1a212b;
+  --secondary-foreground: #e6edf3;
+  --muted: #1a212b;
+  --muted-foreground: #9aa6b2;
+  --accent: #1d2733;
+  --accent-foreground: #e6edf3;
+  --destructive: #f87171;
+  --destructive-foreground: #0b0f14;
+  --border: #232c38;
+  --input: #2e3947;
+  --ring: #3b82f6;
+  --link: #60a5fa;
+  --run: #4ade80;
+  --run-foreground: #0b0f14;
+  --warn: #fbbf24;
+  --warn-foreground: #0b0f14;
+  --cta: #f97316;
+  --cta-foreground: #0b0f14;
+  --overlay: rgb(0 0 0 / 0.6);
+
+  --term-bg: #0b0f14;
+  --term-fg: #e6edf3;
+  --term-cursor: #60a5fa;
+  --term-selection: rgb(59 130 246 / 0.35);
+  --ansi-black: #1a212b;
+  --ansi-red: #f87171;
+  --ansi-green: #4ade80;
+  --ansi-yellow: #fbbf24;
+  --ansi-blue: #60a5fa;
+  --ansi-magenta: #c084fc;
+  --ansi-cyan: #22d3ee;
+  --ansi-white: #cbd5e1;
+  --ansi-bright-black: #64748b;
+  --ansi-bright-red: #fca5a5;
+  --ansi-bright-green: #86efac;
+  --ansi-bright-yellow: #fde68a;
+  --ansi-bright-blue: #93c5fd;
+  --ansi-bright-magenta: #d8b4fe;
+  --ansi-bright-cyan: #67e8f9;
+  --ansi-bright-white: #f8fafc;
+}

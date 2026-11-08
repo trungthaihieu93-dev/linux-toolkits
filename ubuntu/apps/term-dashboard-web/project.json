@@ -1,0 +1,31 @@
+{
+  "name": "term-dashboard-web",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/term-dashboard-web/src",
+  "projectType": "application",
+  "tags": [],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["production", "^production"],
+      "outputs": ["{workspaceRoot}/dist/apps/term-dashboard-web"],
+      "options": {
+        "commands": [
+          "tsc -p apps/term-dashboard-web/tsconfig.app.json --noEmit",
+          "vite build --config apps/term-dashboard-web/vite.config.mts"
+        ],
+        "parallel": false,
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "serve": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "options": {
+        "command": "vite --config apps/term-dashboard-web/vite.config.mts",
+        "cwd": "{workspaceRoot}"
+      }
+    }
+  }
+}

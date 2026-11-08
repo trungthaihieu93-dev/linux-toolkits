@@ -14,6 +14,8 @@
     "strict": false,
     "paths": {
       "@linux-toolchain/core": ["./libs/core/src/index.ts"],
+      "@linux-toolchain/core/shell": ["./libs/core/src/shell.ts"],
+      "@linux-toolchain/term-config": ["./libs/term-config/src/index.ts"],
       "@linux-toolchain/toolchains": ["./libs/toolchains/src/index.ts"]
     },
     "resolveJsonModule": true

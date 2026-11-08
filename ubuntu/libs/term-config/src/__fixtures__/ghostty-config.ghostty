@@ -1,0 +1,19 @@
+# Synthetic Ghostty config for term-config tests (not a real user file).
+
+# Appearance
+theme = Catppuccin Mocha
+font-family = "JetBrains Mono"
+font-family = Noto Color Emoji
+font-size = 13
+background-opacity = 0.95
+
+  # indented comment
+cursor-style = bar
+palette = 0=#1d1f21
+palette = 1=#cc6666
+keybind = ctrl+shift+t=new_tab
+keybind = ctrl+shift+w=close_surface
+window-padding-x = 4
+config-file = ?themes/local.conf
+config-file = extra.conf
+mouse-hide-while-typing = true

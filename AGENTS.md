@@ -12,6 +12,11 @@ Debian/Ubuntu, published to npm and run with `npx linux-toolchain` or
 `ubuntu/install-toolchains.sh`: the same toolchain ids and rc/profile markers,
 plus per-toolchain sub-options, add-ons and `--dry-run`.
 
+The workspace also holds `td` (npm package `linux-term-dashboard`, private and
+not released yet): a local web dashboard for Ghostty, Ptyxis/GNOME Terminal
+and bash/zsh configuration. Its user-facing behaviour, safety model and
+sandboxed testing setup are in `ubuntu/apps/term-dashboard/README.md`.
+
 ## Repository layout
 
 | Path                                               | Owns                                                                 |
@@ -26,14 +31,17 @@ Inside `ubuntu/`. Code paths in the rest of this guide are relative to
 `ubuntu/`; agent-config paths (starting with `.claude`, `.agents`, `.codex`
 or `opencode.json`) are relative to the repository root.
 
-| Path                    | Owns                                                                                |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `apps/linux-toolchain`  | CLI (commander + `@inquirer/prompts` + chalk), bundled by esbuild into one ESM file |
-| `libs/core`             | `@linux-toolchain/core`: Runner, context resolution, logger, shell snippet builders |
-| `libs/toolchains`       | `@linux-toolchain/toolchains`: catalog, option parsing, selection, installers       |
-| `install-toolchains.sh` | Legacy bash installer, kept as the reference. Do not delete it                      |
+| Path                      | Owns                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `apps/linux-toolchain`    | CLI (commander + `@inquirer/prompts` + chalk), bundled by esbuild into one ESM file |
+| `apps/term-dashboard`     | `td`: commander CLI and Hono server on 127.0.0.1, bundled by esbuild; e2e in `e2e/` |
+| `apps/term-dashboard-web` | td's dashboard (Vite + React + Tailwind, xterm.js, Monaco), copied into td's `web/` |
+| `libs/core`               | `@linux-toolchain/core`: Runner, context resolution, logger, shell snippet builders |
+| `libs/toolchains`         | `@linux-toolchain/toolchains`: catalog, option parsing, selection, installers       |
+| `libs/term-config`        | `@linux-toolchain/term-config`: td API contract, Ghostty/gschema/shell-block codecs |
+| `install-toolchains.sh`   | Legacy bash installer, kept as the reference. Do not delete it                      |
 
-The libs are bundled into the CLI and never published on their own.
+The libs are bundled into the apps and never published on their own.
 
 ## Commands
 
@@ -44,9 +52,12 @@ repository root, which is not an Nx workspace:
 bun install                               # CI: bun install --frozen-lockfile
 bun run lint && bun run test && bun run build
 bun --bun nx test toolchains              # one project
-bun run e2e                               # builds, then runs the bundle (apps/linux-toolchain/e2e)
+bun run e2e                               # builds, then runs the bundles (apps/*/e2e)
 bun run format:check                      # prettier; fix with bun run format
 bun run dev -- --all --defaults -y --dry-run
+bun run dev:td                            # td server from source + Vite dev server
+bun run link:td                           # build td and `bun link` it; bun run unlink:td removes it
+bun --bun nx test term-config             # td's shared contract and codecs
 ```
 
 Bun is the package manager (`bun.lock`; `npm` is not used for development)
@@ -58,9 +69,13 @@ the CI `node-compat` job runs it on Node 22.13 and 24. Do not add
 `trustedDependencies`: the one blocked install script (`@parcel/watcher`) is a
 build-from-source fallback that is not needed.
 
-The last line prints every root/user script a full install would run and
+The `dev` line prints every root/user script a full install would run and
 changes nothing. The publishable package is the build output folder
 `dist/apps/linux-toolchain/` (`main.js`, `package.json`, `README.md`, `LICENSE`).
+td builds in two steps: `term-dashboard:bundle` (esbuild) and
+`term-dashboard:build`, which copies `dist/apps/term-dashboard-web` into
+`dist/apps/term-dashboard/web/` (Nx asset copying skips gitignored `dist`
+paths).
 
 ## Architecture
 
@@ -96,6 +111,35 @@ changes nothing. The publishable package is the build output folder
   `options.ts` (flags to run config), `prompts.ts`, `install.ts` and
   `execute.ts` (review, base packages, per-toolchain isolation, summary).
 
+td (paths under `apps/term-dashboard/src/`):
+
+- **CommandRunner + ActivityBus** (`exec/`): `ProcessCommandRunner` spawns
+  argv arrays (`shell: false`) and publishes `started`/`output`/`exited` events
+  to the `ActivityBus`, which keeps a byte-capped history; `GET /api/activity`
+  streams it as SSE. `RecordingCommandRunner` answers from a responder in
+  tests.
+- **FileStore** (`files/file-store.ts`): resolves allowlisted file ids
+  against `HOME`/`XDG_CONFIG_HOME` and writes through one pipeline under a
+  per-file in-process lock (`system/keyed-mutex.ts`): mtime check (409),
+  refusal of non-UTF-8 files (422), temp file with the target's mode, syntax
+  check through CommandRunner (422 on failure; `sh -n` for `.profile`),
+  timestamped 0600 backup, atomic rename. `writeMany` does this for several
+  files as one save and puts earlier files back if a later one fails.
+- **Services** (`server/services.ts`): Ghostty (`ghostty/`), gsettings
+  (`gsettings/`, never the `dconf` CLI), shells (`shell/`, managed blocks from
+  `libs/term-config`), settings and backups, wired into Hono routes in
+  `server/routes/`. `server/guard.ts` enforces the Host/Origin allowlist and
+  the session tokens; `server/session.ts` swaps each launch code for a new
+  token; `server/listen.ts` admits a connection only when `/proc/net/tcp`
+  shows its client end is owned by td's uid (`server/peer-uid.ts`). gsettings
+  changes are serialised per terminal kind.
+- **PTY** (`pty/`): `setpriv --pdeathsig HUP -- script -qfec ... /dev/null`
+  over `/ws/pty`, resized with `stty -F` (rate-limited); output reading pauses
+  while the WebSocket is backed up (`pty/output-flow.ts`); closing the tab or
+  any td exit signal kills the shell's whole session.
+- **Web** (`apps/term-dashboard-web/src/`): pages under `features/`, API
+  types from `@linux-toolchain/term-config`.
+
 ## Adding a toolchain
 
 1. Create `libs/toolchains/src/toolchains/<id>.ts` exporting a `Toolchain`;
@@ -127,6 +171,32 @@ changes nothing. The publishable package is the build output folder
 - Snapshot files (`__snapshots__/`) change only intentionally. Review the diff
   of a snapshot update as carefully as the code change that caused it.
 
+td:
+
+- Commands td runs go through `CommandRunner` and config files are written
+  only through `FileStore`. The only other side effects are td's own state
+  (`settings.json`, the instance file), the PTY spawn and opening the
+  browser.
+- Commands are argv arrays, never shell strings; values reach the PTY shell
+  through the environment, not interpolation.
+- Clients name files by id, never by path; every route identifier is
+  validated.
+- The server binds 127.0.0.1 only, needs a session token (never in a URL or
+  argv), checks Host and Origin, and refuses to run as root. Connections from
+  other local users are refused by peer uid (`/proc/net/tcp`), before any
+  request is read, and the check fails closed. The launch code is single-use,
+  valid 60 s, and only useful to the same user.
+- 409 means only "file changed on disk"; other refusals of a valid request
+  use 422 (see the status list in `libs/term-config/src/api.ts`).
+- Managed-block markers (`# >>> term-dashboard >>>`,
+  `# >>> term-dashboard-omz >>>` and their `<<<` ends) never change.
+- Tests run td against a temporary `HOME` and XDG folders with
+  `GSETTINGS_BACKEND=keyfile` (`src/testing/sandbox.ts`) and never touch the
+  real dotfiles or dconf database. Never run td against your real `HOME` from a
+  test or script.
+- Zero runtime dependencies in `apps/term-dashboard/package.json`, as for
+  `linux-toolchain`.
+
 ## Release
 
 Releasing is a version bump: change `version` in
@@ -139,6 +209,10 @@ job in `.github/workflows/ci.yml` runs after `checks`, `node-compat` and
 jobs tested (`npm publish --provenance`), waits until npm serves it, and pushes
 the `linux-toolchain@X.Y.Z` tag. A version that is already on npm is skipped,
 so re-running is safe.
+
+td (`linux-term-dashboard`) is `"private": true` and is not part of the
+release job; CI only builds, tests and packs it. Enabling its release is a
+separate, maintainer-approved change (steps in its README's maintainer notes).
 
 Authentication: npm tries trusted publishing (OIDC; repository
 `trungthaihieu93-dev/linux-toolkits`, workflow `ci.yml`) first and falls back

@@ -1,0 +1,28 @@
+{
+  "name": "linux-term-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local web dashboard for terminal (Ghostty, Ptyxis, GNOME Terminal) and shell (bash, zsh) configuration on Linux.",
+  "type": "module",
+  "bin": {
+    "td": "main.js"
+  },
+  "files": [
+    "main.js",
+    "web",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "os": [
+    "linux"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trungthaihieu93-dev/linux-toolkits.git",
+    "directory": "ubuntu/apps/term-dashboard"
+  },
+  "license": "MIT"
+}
