@@ -177,9 +177,13 @@ describe('ShellPage mode switch', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(tab('Config').getAttribute('data-state')).toBe('active');
+    // The page is aria-hidden until the dialog has fully unmounted.
     expect(
-      (screen.getByRole('textbox', { name: 'Name 1' }) as HTMLInputElement)
-        .value,
+      (
+        (await screen.findByRole('textbox', {
+          name: 'Name 1',
+        })) as HTMLInputElement
+      ).value,
     ).toBe('gs');
 
     pressTab('Monaco');

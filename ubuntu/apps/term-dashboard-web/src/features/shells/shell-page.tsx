@@ -283,9 +283,12 @@ export function ShellPage({ shell }: { shell: ShellName }) {
             ))}
           </SelectContent>
         </Select>
+        {/* Manual activation: focus returning to a tab after the discard
+            prompt must not switch modes (and prompt) again. */}
         <Tabs
           value={effectiveMode}
           onValueChange={(v) => switchMode(v as ShellMode)}
+          activationMode="manual"
         >
           <TabsList aria-label="Editing mode">
             <TabsTrigger
