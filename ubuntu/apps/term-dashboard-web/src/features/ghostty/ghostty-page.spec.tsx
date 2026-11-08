@@ -218,6 +218,39 @@ describe('GhosttyPage invalid values', () => {
   });
 });
 
+describe('GhosttyPage with a file td will not write', () => {
+  it('shows the reason and disables the form and saving', async () => {
+    const reason =
+      '/home/u/.config/ghostty/config.ghostty is not valid UTF-8; td will not write it';
+    const view = config([{ key: 'font-size', value: '12' }], 1);
+    view.files[0].readOnly = reason;
+    const fake = await mount([view]);
+
+    const note = screen.getByRole('note', { name: 'Read-only' });
+    expect(note.textContent).toContain(reason);
+    expect(box('font-size').disabled).toBe(true);
+
+    // A change that gets through anyway cannot be saved.
+    fireEvent.change(box('font-size'), { target: { value: '16' } });
+    const button = screen.queryByRole('button', {
+      name: 'Review and save',
+    }) as HTMLButtonElement | null;
+    if (button) {
+      expect(button.disabled).toBe(true);
+      fireEvent.click(button);
+    }
+    expect(
+      fake.calls.filter((c) => c.path === API_PATHS.ghosttyPreview),
+    ).toEqual([]);
+
+    // Radix tabs activate on mouse down.
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'config.ghostty' }), {
+      button: 0,
+    });
+    expect(await screen.findByText('read-only')).toBeTruthy();
+  });
+});
+
 describe('GhosttyPage after a save', () => {
   async function save() {
     fireEvent.change(box('font-size'), { target: { value: '16' } });

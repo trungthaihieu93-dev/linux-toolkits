@@ -9,7 +9,12 @@ import {
   type SavePreview,
   type SaveResult,
 } from '@linux-toolchain/term-config';
-import { EyeIcon, HistoryIcon, RotateCwIcon } from 'lucide-react';
+import {
+  EyeIcon,
+  HistoryIcon,
+  RotateCwIcon,
+  TriangleAlertIcon,
+} from 'lucide-react';
 import { useState } from 'react';
 import { StatePanel } from '../../components/state-panel';
 import {
@@ -99,13 +104,31 @@ function BackupViewer({ target }: { target: BackupRef }) {
     );
   }
   return (
-    <LazyCodeEditor
-      value={content.data.content}
-      readOnly
-      language={languageOf(target.fileId)}
-      height="60vh"
-      ariaLabel={`Backup of ${target.fileId} (read only)`}
-    />
+    <div className="flex min-w-0 flex-col gap-3">
+      {content.data.readOnly && <ReadOnlyNote reason={content.data.readOnly} />}
+      <LazyCodeEditor
+        value={content.data.content}
+        readOnly
+        language={languageOf(target.fileId)}
+        height="60vh"
+        ariaLabel={`Backup of ${target.fileId} (read only)`}
+      />
+    </div>
+  );
+}
+
+function ReadOnlyNote({ reason }: { reason: string }) {
+  return (
+    <div
+      role="note"
+      className="flex items-start gap-3 rounded-md border border-warn/40 p-3"
+    >
+      <TriangleAlertIcon
+        className="mt-0.5 size-4 shrink-0 text-warn"
+        aria-hidden
+      />
+      <p className="min-w-0 break-words text-sm">{reason}</p>
+    </div>
   );
 }
 
@@ -117,8 +140,36 @@ export function BackupsPage() {
   const [gsTarget, setGsTarget] = useState<GSettingsBackupRef | null>(null);
   const flow = useSaveFlow();
 
-  const restoreFile = (b: BackupRef) => {
-    if (flow.previewing) return;
+  // The list does not say whether a backup is UTF-8; its content does. One
+  // td will not restore is refused here with the reason, before any preview.
+  const [checking, setChecking] = useState(false);
+  const restoreFile = async (b: BackupRef) => {
+    if (flow.previewing || checking) return;
+    setChecking(true);
+    let readOnly: string | undefined;
+    try {
+      readOnly = (
+        await api.get<BackupContent>(API_PATHS.backupFile(b.fileId, b.ts))
+      ).readOnly;
+    } catch (e) {
+      toast({
+        tone: 'error',
+        title: 'Could not read the backup',
+        description:
+          e instanceof Error ? describeError(e, 'backups') : String(e),
+      });
+      return;
+    } finally {
+      setChecking(false);
+    }
+    if (readOnly) {
+      toast({
+        tone: 'error',
+        title: `${b.fileId} was not restored`,
+        description: readOnly,
+      });
+      return;
+    }
     void flow.start({
       title: `Restore ${b.fileId} from ${formatBackupTs(b.ts)}`,
       description:
@@ -243,9 +294,11 @@ export function BackupsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            aria-disabled={flow.previewing || undefined}
+                            aria-disabled={
+                              flow.previewing || checking || undefined
+                            }
                             aria-label={`Restore ${fileId} from ${formatBackupTs(b.ts)}`}
-                            onClick={() => restoreFile(b)}
+                            onClick={() => void restoreFile(b)}
                           >
                             <HistoryIcon aria-hidden />
                             Restore

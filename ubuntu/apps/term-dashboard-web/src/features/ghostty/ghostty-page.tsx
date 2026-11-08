@@ -66,6 +66,7 @@ function FileTab({ file }: { file: GhosttyFileView }) {
         ) : (
           <Badge variant="muted">missing</Badge>
         )}
+        {file.readOnly && <Badge variant="muted">read-only</Badge>}
       </p>
       {file.includes.length > 0 && (
         <div className="rounded-md border p-3">
@@ -157,12 +158,17 @@ function GhosttyEditor({
     [schema, config, staged],
   );
 
+  // An edit may write either file (or move lines between them), so one file
+  // td will not write (not UTF-8) makes the whole form read-only.
+  const readOnly = config.files.filter((f) => f.readOnly);
+
   const request = (): GhosttySaveRequest => ({
     edits: [...staged.values()],
     baseMtimes: Object.fromEntries(config.files.map((f) => [f.id, f.mtimeMs])),
   });
 
   const review = () => {
+    if (readOnly.length > 0) return;
     const body = request();
     void flow.start({
       title: 'Save Ghostty config',
@@ -212,6 +218,31 @@ function GhosttyEditor({
 
   return (
     <>
+      {readOnly.length > 0 && (
+        <div
+          role="note"
+          aria-label="Read-only"
+          className="flex items-start gap-3 rounded-md border border-warn/40 p-3"
+        >
+          <TriangleAlertIcon
+            className="mt-0.5 size-4 shrink-0 text-warn"
+            aria-hidden
+          />
+          <div className="min-w-0 text-sm">
+            <p className="font-mono font-medium">Read-only</p>
+            {readOnly.map((f) => (
+              <p key={f.id} className="break-words text-muted-foreground">
+                {f.readOnly}
+              </p>
+            ))}
+            <p className="text-muted-foreground">
+              td shows the settings but will not save them until the file is
+              valid UTF-8.
+            </p>
+          </div>
+        </div>
+      )}
+
       {config.conflicts.length > 0 && (
         <div
           role="note"
@@ -293,6 +324,7 @@ function GhosttyEditor({
             }}
             onValidityChange={onValidityChange}
             revisions={revisions}
+            disabled={readOnly.length > 0}
             errors={rawNumberErrors(rawNumbers, staged)}
             notes={(id) =>
               staged.has(id) ? (
@@ -315,8 +347,14 @@ function GhosttyEditor({
       <SaveBar
         count={staged.size}
         busy={flow.previewing}
-        disabled={invalid.size > 0}
-        disabledReason={invalid.size > 0 ? INVALID_FIELDS_REASON : undefined}
+        disabled={readOnly.length > 0 || invalid.size > 0}
+        disabledReason={
+          readOnly.length > 0
+            ? 'td will not save the Ghostty config (see the note above).'
+            : invalid.size > 0
+              ? INVALID_FIELDS_REASON
+              : undefined
+        }
         onDiscard={() =>
           guard.confirmDiscard(() => {
             setStaged(new Map());

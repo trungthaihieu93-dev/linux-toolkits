@@ -158,8 +158,10 @@ export function ShellPage({ shell }: { shell: ShellName }) {
   );
 
   const configCapable = CONFIG_MODE_FILE_IDS.includes(fileId);
+  // td refuses to write such a file (not UTF-8); the reason comes with it.
+  const readOnly = view?.readOnly;
   const effectiveMode: ShellMode =
-    configCapable && view?.model ? mode : 'monaco';
+    configCapable && view?.model && !readOnly ? mode : 'monaco';
   const saved = view?.model ? normalizeModel(view.model) : emptyShellModel();
   const configDirty = Boolean(view && model && !same(model, saved));
   const rawDirty = Boolean(view && raw !== view.content);
@@ -200,7 +202,7 @@ export function ShellPage({ shell }: { shell: ShellName }) {
     model && effectiveMode === 'config' ? validateShellModel(model, shell) : [];
   // Fields report invalid text only while Config mode shows them.
   const { invalid, onValidityChange } = useInvalidFields();
-  const blocked = problems.length > 0 || invalid.size > 0;
+  const blocked = Boolean(readOnly) || problems.length > 0 || invalid.size > 0;
 
   /**
    * Shows what was written at once (content and the new mtime, so the next
@@ -232,7 +234,7 @@ export function ShellPage({ shell }: { shell: ShellName }) {
   };
 
   const review = () => {
-    if (!view) return;
+    if (!view || view.readOnly) return;
     const base = { fileId, baseMtimeMs: view.mtimeMs };
     if (effectiveMode === 'config' && model) {
       const body = { ...base, model };
@@ -340,7 +342,7 @@ export function ShellPage({ shell }: { shell: ShellName }) {
           <TabsList aria-label="Editing mode">
             <TabsTrigger
               value="config"
-              disabled={!configCapable || !view?.model}
+              disabled={!configCapable || !view?.model || Boolean(readOnly)}
             >
               Config
             </TabsTrigger>
@@ -372,7 +374,22 @@ export function ShellPage({ shell }: { shell: ShellName }) {
         </StatePanel>
       )}
 
-      {view && configCapable && view.modelError && (
+      {readOnly && (
+        <div
+          role="note"
+          className="flex items-start gap-3 rounded-md border border-warn/40 p-3"
+        >
+          <TriangleAlertIcon
+            className="mt-0.5 size-4 shrink-0 text-warn"
+            aria-hidden
+          />
+          <p className="min-w-0 text-sm">
+            Read-only: {readOnly}. td shows the file but will not save it.
+          </p>
+        </div>
+      )}
+
+      {view && configCapable && view.modelError && !readOnly && (
         <div
           role="note"
           className="flex items-start gap-3 rounded-md border border-warn/40 p-3"
@@ -404,7 +421,8 @@ export function ShellPage({ shell }: { shell: ShellName }) {
         <div className="flex min-w-0 flex-col gap-2">
           <LazyCodeEditor
             value={raw}
-            onChange={setRaw}
+            onChange={readOnly ? undefined : setRaw}
+            readOnly={Boolean(readOnly)}
             height="60vh"
             ariaLabel={`${FILE_NAMES[fileId]} editor`}
             reveal={reveal}
@@ -434,11 +452,13 @@ export function ShellPage({ shell }: { shell: ShellName }) {
         busy={flow.previewing}
         disabled={blocked}
         disabledReason={
-          problems.length > 0
-            ? 'Fix the problems above to save.'
-            : invalid.size > 0
-              ? INVALID_FIELDS_REASON
-              : undefined
+          readOnly
+            ? 'td will not save this file (see the note above).'
+            : problems.length > 0
+              ? 'Fix the problems above to save.'
+              : invalid.size > 0
+                ? INVALID_FIELDS_REASON
+                : undefined
         }
         onDiscard={() => guard.confirmDiscard(resetDrafts)}
         onReview={review}

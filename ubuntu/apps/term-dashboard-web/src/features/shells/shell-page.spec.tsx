@@ -24,11 +24,13 @@ vi.mock('../monaco/lazy-editors', () => ({
   LazyCodeEditor: (p: {
     value: string;
     onChange?: (v: string) => void;
+    readOnly?: boolean;
     ariaLabel: string;
   }) => (
     <textarea
       aria-label={p.ariaLabel}
       value={p.value}
+      readOnly={p.readOnly}
       onChange={(e) => p.onChange?.(e.target.value)}
     />
   ),
@@ -86,9 +88,9 @@ const INVENTORY: TerminalInventory = {
   pty: { available: true },
 };
 
-function fakeApi(): ApiClient {
+function fakeApi(view: ShellFileView = VIEW): ApiClient {
   const get = async (path: string): Promise<unknown> => {
-    if (path === API_PATHS.shellFile('bash', 'bashrc')) return VIEW;
+    if (path === API_PATHS.shellFile('bash', 'bashrc')) return view;
     if (path === API_PATHS.inventory) return INVENTORY;
     if (path === API_PATHS.health)
       return { app: 'term-dashboard', version: '0', pid: 1 };
@@ -230,6 +232,42 @@ describe('ShellPage mode switch', () => {
     );
     await screen.findByRole('textbox', { name: '.bashrc editor' });
     expect(tab('Monaco').getAttribute('data-state')).toBe('active');
+  });
+});
+
+describe('ShellPage with a file td will not write', () => {
+  const REASON = '/home/u/.bashrc is not valid UTF-8; td will not write it';
+
+  it('shows the reason and offers no way to edit or save', async () => {
+    window.history.replaceState(null, '', '/shells/bash');
+    render(
+      <RouterProvider>
+        <TooltipProvider>
+          <ToastProvider>
+            <ApiContext.Provider value={fakeApi({ ...VIEW, readOnly: REASON })}>
+              <ShellDataProvider>
+                <ShellPage shell="bash" />
+              </ShellDataProvider>
+            </ApiContext.Provider>
+          </ToastProvider>
+        </TooltipProvider>
+      </RouterProvider>,
+    );
+    const editor = (await screen.findByRole('textbox', {
+      name: '.bashrc editor',
+    })) as HTMLTextAreaElement;
+    expect(screen.getByRole('note').textContent).toContain(REASON);
+    expect(editor.readOnly).toBe(true);
+    expect(tab('Config').hasAttribute('disabled')).toBe(true);
+    expect(tab('Monaco').getAttribute('data-state')).toBe('active');
+    expect(screen.queryByRole('region', { name: 'Aliases' })).toBeNull();
+
+    // Even a change event that gets through leaves nothing to save.
+    fireEvent.change(editor, { target: { value: `${CONTENT}echo hi\n` } });
+    expect(screen.queryByRole('button', { name: 'Review and save' })).toBe(
+      null,
+    );
+    expect(editor.value).toBe(CONTENT);
   });
 });
 
