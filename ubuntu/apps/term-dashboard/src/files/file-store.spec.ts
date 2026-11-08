@@ -17,6 +17,8 @@ import { createActivityBus } from '../exec/activity-bus';
 import {
   ProcessCommandRunner,
   RecordingCommandRunner,
+  type CommandResult,
+  type CommandRunner,
 } from '../exec/command-runner';
 import { resolveDirs } from '../system/environment';
 import { createSandbox, haveBinaries, type Sandbox } from '../testing/sandbox';
@@ -358,6 +360,69 @@ describe('FileStore safety', () => {
     expect(await readFile(bashrc())).toEqual(original);
     const backup = await s.readBackup('bashrc', saved.backup?.ts as string);
     expect(backup.content).toBe('\uFEFF# with BOM\n');
+  });
+
+  it('serialises concurrent writes through two ids that alias one file', async () => {
+    // Each syntax check waits until the other save has reached its own (or
+    // 200 ms pass), so two unserialised saves both pass every mtime check.
+    const waiting: (() => void)[] = [];
+    const runner: CommandRunner = {
+      run: () =>
+        new Promise<CommandResult>((resolve) => {
+          const releaseAll = () => {
+            for (const release of waiting.splice(0)) release();
+          };
+          waiting.push(() =>
+            resolve({
+              code: 0,
+              signal: null,
+              stdout: '',
+              stderr: '',
+              durationMs: 0,
+            }),
+          );
+          if (waiting.length === 2) releaseAll();
+          else setTimeout(releaseAll, 200);
+        }),
+    };
+    const s = new FileStore(resolveDirs(sbx.env, sbx.home), runner);
+    // ~/.bash_profile -> .profile: two ids, one real file.
+    await writeFile(join(sbx.home, '.profile'), 'echo base\n');
+    await symlink('.profile', join(sbx.home, '.bash_profile'));
+    const base = (await s.read('profile')).mtimeMs;
+    expect((await s.read('bash_profile')).mtimeMs).toBe(base);
+
+    const results = await Promise.allSettled([
+      s.write('profile', 'echo a\n', { baseMtimeMs: base }),
+      s.write('bash_profile', 'echo b\n', { baseMtimeMs: base }),
+    ]);
+    const failed = results.filter(
+      (r): r is PromiseRejectedResult => r.status === 'rejected',
+    );
+    expect(failed).toHaveLength(1);
+    expect((failed[0].reason as HttpError).status).toBe(409);
+    expect(await readFile(join(sbx.home, '.profile'), 'utf8')).toBe(
+      results[0].status === 'fulfilled' ? 'echo a\n' : 'echo b\n',
+    );
+    expect(
+      (await lstat(join(sbx.home, '.bash_profile'))).isSymbolicLink(),
+    ).toBe(true);
+  });
+
+  it('refuses one save that names two ids aliasing one file', async () => {
+    await writeFile(join(sbx.home, '.profile'), 'echo base\n');
+    await symlink('.profile', join(sbx.home, '.bash_profile'));
+    const base = (await store.read('profile')).mtimeMs;
+    await expectStatus(
+      store.writeMany([
+        { id: 'profile', content: 'echo a\n', baseMtimeMs: base },
+        { id: 'bash_profile', content: 'echo b\n', baseMtimeMs: base },
+      ]),
+      400,
+    );
+    expect(await readFile(join(sbx.home, '.profile'), 'utf8')).toBe(
+      'echo base\n',
+    );
   });
 
   it.skipIf(!hasDash)(

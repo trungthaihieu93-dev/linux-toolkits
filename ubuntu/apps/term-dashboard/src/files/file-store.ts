@@ -75,6 +75,13 @@ export interface WriteItem extends WriteOptions {
   content: string;
 }
 
+/** A `WriteItem` with its resolved paths. */
+interface Target {
+  item: WriteItem;
+  path: string;
+  realPath: string;
+}
+
 type CheckKind = 'bash' | 'sh' | 'zsh' | 'ghostty';
 
 /**
@@ -278,12 +285,20 @@ export class FileStore {
         throw badRequest(`content is larger than ${MAX_FILE_BYTES} bytes`);
       }
     }
-    return this.locks.runAll(ids, () => this.writeLocked(items));
+    // Lock by the file actually written: two ids can alias one file through
+    // a symlink (~/.bash_profile -> .profile).
+    const targets: Target[] = [];
+    for (const item of items) {
+      targets.push({ item, ...(await this.resolve(item.id, true)) });
+    }
+    const realPaths = targets.map((t) => t.realPath);
+    if (new Set(realPaths).size !== realPaths.length) {
+      throw badRequest('a save names the same file twice (through a symlink)');
+    }
+    return this.locks.runAll(realPaths, () => this.writeLocked(targets));
   }
 
-  private async writeLocked(
-    items: readonly WriteItem[],
-  ): Promise<SaveResult[]> {
+  private async writeLocked(targets: readonly Target[]): Promise<SaveResult[]> {
     /** `tmp` is '' once renamed; `check` is set once it passed. */
     const staged: {
       item: WriteItem;
@@ -295,8 +310,7 @@ export class FileStore {
     const replaced: { path: string; realPath: string; result: SaveResult }[] =
       [];
     try {
-      for (const item of items) {
-        const { path, realPath } = await this.resolve(item.id, true);
+      for (const { item, path, realPath } of targets) {
         const before = await statOrNull(realPath);
         if (before && !before.isFile()) {
           throw badRequest(`${path} is not a regular file`);
