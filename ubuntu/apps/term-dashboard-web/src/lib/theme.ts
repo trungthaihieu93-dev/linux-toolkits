@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -56,7 +57,8 @@ interface ThemeProviderProps {
 
 /**
  * Theme state. `settings.theme` from the API is authoritative and is applied
- * once it loads; changes apply at once and persist through `PUT /api/settings`.
+ * once it loads, unless the user picked a theme first; changes apply at once
+ * and persist through `PUT /api/settings`.
  */
 export function ThemeProvider({
   backend,
@@ -66,12 +68,15 @@ export function ThemeProvider({
   children,
 }: ThemeProviderProps) {
   const [theme, setThemeState] = useState<ThemeMode>(() => currentTheme(root));
+  // A choice made before the settings load wins over the loaded value
+  // (the PUT for it may already have replaced that value on disk).
+  const chosen = useRef(false);
 
   useEffect(() => {
     let active = true;
     backend.load().then(
       (settings) => {
-        if (!active) return;
+        if (!active || chosen.current) return;
         applyTheme(settings.theme, root, cache);
         setThemeState(settings.theme);
       },
@@ -86,6 +91,7 @@ export function ThemeProvider({
 
   const setTheme = useCallback(
     (next: ThemeMode) => {
+      chosen.current = true;
       applyTheme(next, root, cache);
       setThemeState(next);
       backend.save(next).catch((error: unknown) => onSaveError?.(error));

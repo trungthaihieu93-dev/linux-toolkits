@@ -35,10 +35,17 @@ import { useUnsavedChangesGuard } from '../save/unsaved-changes';
 import { useSaveFlow } from '../save/use-save-flow';
 import { SchemaForm } from '../schema-form/schema-form';
 import {
+  INVALID_FIELDS_REASON,
+  useInvalidFields,
+} from '../schema-form/use-invalid-fields';
+import {
   ghosttyFields,
   ghosttyFormState,
+  rawNumberErrors,
+  rawNumberKeys,
   stageChange,
   stageReset,
+  withSavedMtimes,
 } from './ghostty-fields';
 
 /** Ghostty's default `reload_config` binding on Linux. */
@@ -107,27 +114,39 @@ function FileTab({ file }: { file: GhosttyFileView }) {
 
 function GhosttyEditor({
   schema,
-  config,
+  initialConfig,
   themes,
   fonts,
-  reload,
 }: {
   schema: GhosttySchema;
-  config: GhosttyConfigView;
+  initialConfig: GhosttyConfigView;
   themes: string[];
   fonts: string[];
-  reload: () => void;
 }) {
   const api = useApi();
   const toast = useToast();
+  const [config, setConfig] = useState(initialConfig);
   const [staged, setStaged] = useState<Map<string, GhosttyEdit>>(new Map());
   const [saved, setSaved] = useState<GhosttySaveResult | null>(null);
   const flow = useSaveFlow();
   const guard = useUnsavedChangesGuard(staged.size > 0);
+  const { invalid, onValidityChange } = useInvalidFields();
+  const [revisions, setRevisions] = useState<Record<string, number>>({});
+  // Remount fields so text typed into them goes with the edit.
+  const remount = (ids: Iterable<string>) =>
+    setRevisions((r) => {
+      const next = { ...r };
+      for (const id of ids) next[id] = (next[id] ?? 0) + 1;
+      return next;
+    });
 
+  const rawNumbers = useMemo(
+    () => rawNumberKeys(schema, config),
+    [schema, config],
+  );
   const fields = useMemo(
-    () => ghosttyFields(schema, themes, fonts),
-    [schema, themes, fonts],
+    () => ghosttyFields(schema, themes, fonts, rawNumbers),
+    [schema, themes, fonts, rawNumbers],
   );
   const keys = useMemo(
     () => new Map(schema.keys.map((k) => [k.key, k])),
@@ -163,8 +182,25 @@ function GhosttyEditor({
           body,
         );
         setSaved(result);
+        // Read the files again before dropping the staged edits, so the form
+        // never shows the values from before the save.
+        let next: GhosttyConfigView;
+        try {
+          next = await api.get<GhosttyConfigView>(API_PATHS.ghosttyConfig);
+        } catch (e) {
+          // The new mtimes still let the next save go through.
+          next = withSavedMtimes(config, result);
+          toast({
+            tone: 'error',
+            title: 'Saved, but the config could not be read again',
+            description:
+              `The form shows the values from before the save; reload the page to see the files. ${
+                e instanceof Error ? describeError(e, 'the Ghostty config') : ''
+              }`.trim(),
+          });
+        }
+        setConfig(next);
         setStaged(new Map());
-        reload();
         toast({
           tone: 'success',
           title: 'Ghostty config saved',
@@ -251,7 +287,13 @@ function GhosttyEditor({
               const k = keys.get(id);
               if (k) setStaged((s) => stageChange(s, k, v, config));
             }}
-            onReset={(id) => setStaged((s) => stageReset(s, id, config))}
+            onReset={(id) => {
+              setStaged((s) => stageReset(s, id, config));
+              remount([id]);
+            }}
+            onValidityChange={onValidityChange}
+            revisions={revisions}
+            errors={rawNumberErrors(rawNumbers, staged)}
             notes={(id) =>
               staged.has(id) ? (
                 <span className="font-mono text-xs text-link">
@@ -273,7 +315,14 @@ function GhosttyEditor({
       <SaveBar
         count={staged.size}
         busy={flow.previewing}
-        onDiscard={() => guard.confirmDiscard(() => setStaged(new Map()))}
+        disabled={invalid.size > 0}
+        disabledReason={invalid.size > 0 ? INVALID_FIELDS_REASON : undefined}
+        onDiscard={() =>
+          guard.confirmDiscard(() => {
+            setStaged(new Map());
+            remount(invalid);
+          })
+        }
         onReview={review}
       />
       <SaveReviewDialog {...flow.dialog} />
@@ -341,10 +390,9 @@ export function GhosttyPage() {
       ) : (
         <GhosttyEditor
           schema={data.data.schema}
-          config={data.data.config}
+          initialConfig={data.data.config}
           themes={themes.status === 'ready' ? themes.data.names : []}
           fonts={fonts.status === 'ready' ? fonts.data.names : []}
-          reload={data.reload}
         />
       )}
     </PageBody>

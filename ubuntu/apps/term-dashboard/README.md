@@ -170,9 +170,11 @@ The unit, integration and e2e tests use the same setup.
 ## Maintainer notes
 
 The package is `"private": true`, and the CI `release` job publishes only
-`linux-toolchain`. CI builds, tests and packs td (artifact `td-package`), runs
-`td --version` and a health check on Node 22.13 and 24, and runs the tarball
-with `npx` in the smoke job. Publishing td is a separate change that needs the
+`linux-toolchain`. CI tests td in the `checks` job and packs it in the `td` job
+(artifact `td-package`); `td-node-compat` runs `td --version` and a health
+check on Node 22.13 and 24, and `td-smoke` runs the tarball with `npx`. The
+`release` job does not need the td jobs, so a td failure never holds back a
+`linux-toolchain` publish. Publishing td is a separate change that needs the
 maintainer's go-ahead:
 
 1. Remove `"private": true` from `apps/term-dashboard/package.json`.

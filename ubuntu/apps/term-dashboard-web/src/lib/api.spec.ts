@@ -1,4 +1,10 @@
-import { ApiRequestError, createApiClient, describeError } from './api';
+import { API_PATHS } from '@linux-toolchain/term-config';
+import {
+  ApiRequestError,
+  createApiClient,
+  describeError,
+  isFileWriteRoute,
+} from './api';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status });
@@ -53,6 +59,45 @@ describe('createApiClient', () => {
       expect.objectContaining({ status: 409, detail: 'zshrc' }),
     );
     expect(events.onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it('keeps the file-changed prompt to file writes', async () => {
+    const { api, events } = client(() =>
+      json({ error: 'the default profile cannot be deleted' }, 409),
+    );
+    const uuid = '0123456789abcdef0123456789abcdef';
+    await expect(
+      api.request('DELETE', API_PATHS.terminalProfile('ptyxis', uuid)),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'the default profile cannot be deleted',
+    });
+    expect(events.onConflict).not.toHaveBeenCalled();
+  });
+
+  it('knows which routes write files', () => {
+    const writes: [string, string][] = [
+      ['POST', API_PATHS.ghosttyPreview],
+      ['POST', API_PATHS.ghosttySave],
+      ['POST', API_PATHS.shellConfig('zsh', 'save')],
+      ['POST', API_PATHS.shellRaw('bash', 'preview')],
+      [
+        'POST',
+        API_PATHS.backupFileAction('bashrc', '20261108T050000Z-1', 'restore'),
+      ],
+    ];
+    for (const [method, path] of writes)
+      expect(isFileWriteRoute(method, path)).toBe(true);
+    const others: [string, string][] = [
+      ['GET', API_PATHS.ghosttyConfig],
+      ['GET', API_PATHS.shellFile('bash', 'bashrc')],
+      ['PUT', API_PATHS.terminalGlobal('ptyxis')],
+      ['DELETE', API_PATHS.terminalProfile('ptyxis', 'abc')],
+      ['POST', API_PATHS.gsettingsRestore('20261108T050000Z-1')],
+      ['PUT', API_PATHS.settings],
+    ];
+    for (const [method, path] of others)
+      expect(isFileWriteRoute(method, path)).toBe(false);
   });
 
   it('reports a non-JSON error and an unreachable server', async () => {

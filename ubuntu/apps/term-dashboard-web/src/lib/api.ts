@@ -36,8 +36,26 @@ export class ApiRequestError extends Error {
 export interface ApiEvents {
   /** 401 on any call: the session token is no longer valid. */
   onUnauthorized: () => void;
-  /** 409 on a write: the file changed on disk since it was read. */
+  /**
+   * 409 on a file write (`isFileWriteRoute`): the file changed on disk since
+   * it was read. A 409 or 422 from any other route is only thrown, so the
+   * caller shows the server's message.
+   */
   onConflict: (error: ApiRequestError) => void;
+}
+
+/** Routes that write (or preview a write of) a file under an mtime check. */
+const FILE_WRITE_ROUTES = [
+  /^\/api\/ghostty\/(preview|save)$/,
+  /^\/api\/shells\/[^/]+\/(config|raw)\/(preview|save)$/,
+  /^\/api\/backups\/files\/[^/]+\/[^/]+\/(preview|restore)$/,
+];
+
+export function isFileWriteRoute(method: string, path: string): boolean {
+  return (
+    method !== 'GET' &&
+    FILE_WRITE_ROUTES.some((route) => route.test(path.split('?')[0]))
+  );
 }
 
 export interface ApiClient {
@@ -72,8 +90,9 @@ async function errorFrom(res: Response): Promise<ApiRequestError> {
 
 /**
  * Typed JSON client for `/api/*`. Every call carries the session token in
- * the Authorization header; 401 and 409 are also reported through `events`
- * so the app can show the session-expired screen or the reload prompt.
+ * the Authorization header; 401 and a 409 from a file write are also
+ * reported through `events` so the app can show the session-expired screen
+ * or the reload prompt.
  */
 export function createApiClient(
   token: string,
@@ -105,7 +124,8 @@ export function createApiClient(
     if (!res.ok) {
       const error = await errorFrom(res);
       if (res.status === 401) events.onUnauthorized();
-      if (res.status === 409) events.onConflict(error);
+      if (res.status === 409 && isFileWriteRoute(method, path))
+        events.onConflict(error);
       throw error;
     }
     if (res.status === 204) return undefined as T;

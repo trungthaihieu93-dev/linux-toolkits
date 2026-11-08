@@ -17,6 +17,13 @@ export interface SchemaFormProps {
   errors?: Record<string, string | undefined>;
   notes?: (id: string) => ReactNode;
   disabled?: boolean;
+  /** See `SchemaFieldProps.onValidityChange`. */
+  onValidityChange?: (id: string, invalid: boolean) => void;
+  /**
+   * Bumping a field's revision mounts it afresh, which drops text typed into
+   * it (used after a reset or discard, when the value may not change).
+   */
+  revisions?: Record<string, number>;
   /** Lists longer than this are windowed. */
   windowThreshold?: number;
 }
@@ -46,6 +53,8 @@ export function SchemaForm({
   errors,
   notes,
   disabled,
+  onValidityChange,
+  revisions,
   windowThreshold = 40,
 }: SchemaFormProps) {
   const searchId = useId();
@@ -75,7 +84,11 @@ export function SchemaForm({
           count: list.length,
         });
       for (const f of list)
-        out.push({ type: 'field', key: `field:${f.id}`, field: f });
+        out.push({
+          type: 'field',
+          key: `field:${f.id}:${revisions?.[f.id] ?? 0}`,
+          field: f,
+        });
     }
     return out;
   })();
@@ -96,6 +109,11 @@ export function SchemaForm({
         error={errors?.[row.field.id]}
         note={notes?.(row.field.id)}
         disabled={disabled}
+        onValidityChange={
+          onValidityChange
+            ? (invalid) => onValidityChange(row.field.id, invalid)
+            : undefined
+        }
       />
     );
 

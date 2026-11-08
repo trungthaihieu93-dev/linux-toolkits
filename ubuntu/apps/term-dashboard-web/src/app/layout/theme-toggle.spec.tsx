@@ -96,4 +96,25 @@ describe('ThemeToggle', () => {
     expect(root.classList.contains('dark')).toBe(false);
     expect(onSaveError).toHaveBeenCalledWith(expect.any(Error));
   });
+
+  it('a settings load that answers after a toggle does not undo it', async () => {
+    let answer: (s: { theme: ThemeMode }) => void = () => undefined;
+    const backend: ThemeBackend = {
+      load: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      save: vi.fn(async () => undefined),
+    };
+    await mount(backend);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Switch to light theme' }),
+    );
+    await act(async () => answer({ theme: 'dark' }));
+    expect(root.classList.contains('dark')).toBe(false);
+    expect(sessionStorage.getItem(THEME_CACHE_KEY)).toBe('light');
+    expect(
+      screen.getByRole('button', { name: 'Switch to dark theme' }),
+    ).toBeTruthy();
+  });
 });

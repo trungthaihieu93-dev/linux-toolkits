@@ -43,6 +43,7 @@
  *   warn on muted                              9.70    5.62
  *   warn on accent                             9.05    5.27
  *   primary-foreground on primary              5.23    5.17
+ *   primary-foreground on primary-hover        7.56    6.70
  *   secondary-foreground on secondary         13.71   15.73
  *   accent-foreground on accent               12.78   14.73
  *   destructive-foreground on destructive      6.95    6.47
@@ -54,7 +55,9 @@
  * Borders, `--ring` and `--input` are non-text UI (3:1 target): the focus
  * ring uses `--ring` (primary) at 2px with an offset, which is >= 3:1 on the
  * background in both modes (dark 5.23, light 4.85). The `--ansi-*` colours
- * are the terminal palette, chosen by programs running in the shell.
+ * are the terminal palette, chosen by programs running in the shell; a few
+ * are faint on the terminal background, and the xterm option
+ * `minimumContrastRatio: 4.5` raises them to 4.5:1 as they are drawn.
  */
 
 :root {
@@ -68,6 +71,9 @@
   --popover-foreground: #0f172a;
   --primary: #2563eb;
   --primary-foreground: #ffffff;
+  /* Hover darkens in light mode and lightens in dark mode, so the label
+     keeps at least the contrast it has at rest. */
+  --primary-hover: #1d4ed8;
   --secondary: #edf1f5;
   --secondary-foreground: #0f172a;
   --muted: #edf1f5;
@@ -119,6 +125,7 @@
   --popover-foreground: #e6edf3;
   --primary: #3b82f6;
   --primary-foreground: #0b0f14;
+  --primary-hover: #60a5fa;
   --secondary: #1a212b;
   --secondary-foreground: #e6edf3;
   --muted: #1a212b;

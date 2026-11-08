@@ -168,6 +168,8 @@ export interface ShellConfigFormProps {
   onChange: (model: ShellBlockModel) => void;
   catalog: OhMyZshCatalog | null;
   onEditAtLine: (line: number) => void;
+  /** See `SchemaFieldProps.onValidityChange`; saving waits for valid fields. */
+  onValidityChange?: (id: string, invalid: boolean) => void;
 }
 
 /**
@@ -181,7 +183,12 @@ export function ShellConfigForm({
   onChange,
   catalog,
   onEditAtLine,
+  onValidityChange,
 }: ShellConfigFormProps) {
+  const validity = (id: string) =>
+    onValidityChange
+      ? (invalid: boolean) => onValidityChange(id, invalid)
+      : undefined;
   const set = (patch: Partial<ShellBlockModel>) =>
     onChange({ ...model, ...patch });
   const omz = view.ohMyZsh;
@@ -211,6 +218,7 @@ export function ShellConfigForm({
         description="Written to the term-dashboard block of this file."
       >
         <SchemaField
+          onValidityChange={validity(FIELDS.aliases.id)}
           field={FIELDS.aliases}
           value={aliases}
           modified={!same(model.aliases, saved.aliases)}
@@ -231,6 +239,7 @@ export function ShellConfigForm({
         description="Exported variables (export NAME=value)."
       >
         <SchemaField
+          onValidityChange={validity(FIELDS.exports.id)}
           field={FIELDS.exports}
           value={exports}
           modified={!same(model.exports, saved.exports)}
@@ -248,6 +257,7 @@ export function ShellConfigForm({
 
       <Section title="PATH">
         <SchemaField
+          onValidityChange={validity(FIELDS.prepend.id)}
           field={FIELDS.prepend}
           value={model.path.prepend}
           modified={!same(model.path.prepend, saved.path.prepend)}
@@ -259,6 +269,7 @@ export function ShellConfigForm({
           }
         />
         <SchemaField
+          onValidityChange={validity(FIELDS.append.id)}
           field={FIELDS.append}
           value={model.path.append}
           modified={!same(model.path.append, saved.path.append)}
@@ -274,6 +285,7 @@ export function ShellConfigForm({
       <Section title="History">
         {historyFields(view.shell).map((f) => (
           <SchemaField
+            onValidityChange={validity(f.id)}
             key={f.id}
             field={f}
             value={historyValue(model.history, f.id)}
@@ -308,6 +320,7 @@ export function ShellConfigForm({
           {omz?.detected && (
             <>
               <SchemaField
+                onValidityChange={validity('omz-theme')}
                 field={{
                   id: 'omz-theme',
                   label: 'Theme',
@@ -331,6 +344,7 @@ export function ShellConfigForm({
                 }
               />
               <SchemaField
+                onValidityChange={validity('omz-plugins')}
                 field={{
                   id: 'omz-plugins',
                   label: 'Plugins',

@@ -1,5 +1,5 @@
 import { PaletteIcon, XIcon } from 'lucide-react';
-import { useId, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
 import { Badge } from '../../components/ui/badge';
 import { Input } from '../../components/ui/input';
 import { cn } from '../../lib/utils';
@@ -90,6 +90,14 @@ export function SearchableSelect({
   };
 
   const optionId = (i: number) => `${listId}-${i}`;
+
+  // Keep the highlighted option visible in the scrolling list.
+  useEffect(() => {
+    if (!expanded) return;
+    document
+      .getElementById(`${listId}-${active}`)
+      ?.scrollIntoView?.({ block: 'nearest' });
+  }, [expanded, active, listId]);
 
   return (
     <div className="flex min-w-0 flex-col gap-2">

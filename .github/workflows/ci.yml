@@ -60,9 +60,12 @@ jobs:
         run: bun install --frozen-lockfile
 
       # term-dashboard runs `zsh -n` on .zshrc candidates; without zsh its zsh
-      # specs and e2e case are skipped.
+      # specs and e2e case are skipped. A standard Ubuntu package, so this is
+      # the only td step left in the jobs the release depends on.
       - name: Install zsh
-        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update -q
+          sudo apt-get -o Acquire::Retries=3 install -y -q zsh
 
       - name: Derive Nx base and head SHAs
         if: env.NX_AFFECTED == 'true'
@@ -118,28 +121,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # term-dashboard is packed and tested but stays private: it is not in
-      # the `package` artifact, and the release job never publishes it.
-      - name: Build td package
-        run: bun --bun nx build term-dashboard
-
-      - name: Pack td package
-        id: td-pack
-        working-directory: ubuntu/dist/apps/term-dashboard
-        run: |
-          test "$(jq -r .private package.json)" = true
-          mkdir -p "$RUNNER_TEMP/td-package"
-          file=$(npm pack --pack-destination "$RUNNER_TEMP/td-package" --json | jq -r '.[0].filename')
-          test -f "$RUNNER_TEMP/td-package/$file"
-          echo "file=$file" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: td-package
-          path: ${{ runner.temp }}/td-package/${{ steps.td-pack.outputs.file }}
-          if-no-files-found: error
-          retention-days: 7
-
   node-compat:
     name: Bundle on Node ${{ matrix.node }}
     needs: checks
@@ -183,6 +164,133 @@ jobs:
       - name: Dry-run every toolchain
         working-directory: ${{ runner.temp }}
         run: node package/main.js --all --defaults -y --dry-run
+
+  smoke:
+    name: Real install smoke (ubuntu:24.04, root --user)
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: ubuntu:24.04
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: package
+          path: /tmp/package-artifact
+
+      - name: Extract package
+        working-directory: /tmp
+        run: tar -xzf package-artifact/*.tgz
+
+      - name: Create non-root target user
+        run: useradd -m -s /bin/bash tester
+
+      - name: Install go and cpp for tester
+        working-directory: /tmp
+        run: node package/main.js --only go,cpp --defaults -y --user tester
+
+      - name: Assert toolchains work
+        run: |
+          /usr/local/go/bin/go version
+          gcc --version
+          clang --version
+
+  # term-dashboard (td) is packed and tested here, outside the jobs the
+  # release depends on: a td failure never holds back a linux-toolchain
+  # publish. td stays private: it is not in the `package` artifact, and the
+  # release job never publishes it.
+  td:
+    name: td package
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ubuntu
+    env:
+      NX_NO_CLOUD: 'true'
+      NX_DAEMON: 'false'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: ubuntu/package.json
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('ubuntu/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build td package
+        run: bun --bun nx build term-dashboard
+
+      - name: Pack td package
+        id: td-pack
+        working-directory: ubuntu/dist/apps/term-dashboard
+        run: |
+          test "$(jq -r .private package.json)" = true
+          mkdir -p "$RUNNER_TEMP/td-package"
+          file=$(npm pack --pack-destination "$RUNNER_TEMP/td-package" --json | jq -r '.[0].filename')
+          test -f "$RUNNER_TEMP/td-package/$file"
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: td-package
+          path: ${{ runner.temp }}/td-package/${{ steps.td-pack.outputs.file }}
+          if-no-files-found: error
+          retention-days: 7
+
+  td-smoke:
+    name: td tarball with npx (ubuntu:24.04, root)
+    needs: td
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container: ubuntu:24.04
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: td-package
+          path: /tmp/td-package-artifact
+
+      # As root td refuses to start its server, so only --version and --help
+      # run here; the e2e suite covers the server as a normal user.
+      - name: Run td tarball with npx
+        working-directory: /tmp/td-package-artifact
+        run: |
+          npx --yes ./linux-term-dashboard-*.tgz --version
+          npx --yes ./linux-term-dashboard-*.tgz --help
+
+  td-node-compat:
+    name: td on Node ${{ matrix.node }}
+    needs: td
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.13.0 is the engines.node floor td shares with linux-toolchain.
+        node: ['22.13.0', '24']
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -241,52 +349,6 @@ jobs:
             echo "expected exit 143 after SIGTERM, got $status"
             exit 1
           fi
-
-  smoke:
-    name: Real install smoke (ubuntu:24.04, root --user)
-    needs: checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    container: ubuntu:24.04
-    steps:
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: package
-          path: /tmp/package-artifact
-
-      - name: Extract package
-        working-directory: /tmp
-        run: tar -xzf package-artifact/*.tgz
-
-      - name: Create non-root target user
-        run: useradd -m -s /bin/bash tester
-
-      - name: Install go and cpp for tester
-        working-directory: /tmp
-        run: node package/main.js --only go,cpp --defaults -y --user tester
-
-      - name: Assert toolchains work
-        run: |
-          /usr/local/go/bin/go version
-          gcc --version
-          clang --version
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: td-package
-          path: /tmp/td-package-artifact
-
-      # As root td refuses to start its server, so only --version and --help
-      # run here; the e2e suite covers the server as a normal user.
-      - name: Run td tarball with npx
-        working-directory: /tmp/td-package-artifact
-        run: |
-          npx --yes ./linux-term-dashboard-*.tgz --version
-          npx --yes ./linux-term-dashboard-*.tgz --help
 
   release:
     name: Publish to npm (new version on main)
